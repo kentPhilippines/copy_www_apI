@@ -57,18 +57,26 @@ class NginxService:
             config_content = generate_nginx_config(site)
             config_path = get_nginx_config_path(site.domain)
             
+            # 确保配置目录存在
+            config_dir = os.path.dirname(config_path)
+            os.makedirs(config_dir, exist_ok=True)
+            
             # 写入配置文件
             async with aiofiles.open(config_path, 'w') as f:
                 await f.write(config_content)
             
             # 设置配置文件权限
             await run_command(f"chown {nginx_user} {config_path}")
-            await run_command("chmod 644 {config_path}")
+            await run_command(f"chmod 644 {config_path}")
             
             # 创建软链接
             enabled_path = get_nginx_enabled_path(site.domain)
-            if not os.path.exists(enabled_path):
-                os.symlink(config_path, enabled_path)
+            enabled_dir = os.path.dirname(enabled_path)
+            os.makedirs(enabled_dir, exist_ok=True)
+            
+            if os.path.exists(enabled_path):
+                os.remove(enabled_path)
+            os.symlink(config_path, enabled_path)
             
             # 测试配置
             try:
@@ -76,7 +84,8 @@ class NginxService:
             except Exception as e:
                 logger.error(f"Nginx配置测试失败: {str(e)}")
                 # 如果配置测试失败，删除配置文件和软链接
-                os.remove(config_path)
+                if os.path.exists(config_path):
+                    os.remove(config_path)
                 if os.path.exists(enabled_path):
                     os.remove(enabled_path)
                 raise
@@ -169,30 +178,36 @@ class NginxService:
                     await run_command(f"mv {nginx_conf}.bak {nginx_conf}")
                 raise
 
-            # 启动Nginx
+            # 完全停止并重启Nginx
+            await run_command("systemctl stop nginx")
+            await run_command("sleep 2")  # 等待服务完全停止
             await run_command("systemctl start nginx")
+            await run_command("sleep 2")  # 等待服务完全启动
             logger.info("Nginx服务已重启")
 
-            # 等待几秒确保服务完全启动
-            await run_command("sleep 2")
-
             # 验证域名是否确实无法访问
-            try:
-                result = await run_command(f"curl -s -I --connect-timeout 5 http://{domain} || true")
-                if "200 OK" in result or "301 Moved Permanently" in result:
-                    logger.warning(f"警告：域名 {domain} 仍然可以访问，尝试强制重载配置")
-                    # 强制重载配置
-                    await run_command("systemctl reload nginx")
-                    await run_command("systemctl restart nginx")
-                    # 再次验证
+            max_retries = 3
+            retry_count = 0
+            while retry_count < max_retries:
+                try:
                     result = await run_command(f"curl -s -I --connect-timeout 5 http://{domain} || true")
                     if "200 OK" in result or "301 Moved Permanently" in result:
-                        raise Exception(f"无法完全删除站点 {domain} 的访问")
-            except Exception as e:
-                if "无法完全删除站点" in str(e):
-                    raise
-                else:
+                        logger.warning(f"警告：域名 {domain} 仍然可以访问，尝试强制重载配置")
+                        # 强制重载配置
+                        await run_command("systemctl stop nginx")
+                        await run_command("sleep 2")
+                        await run_command("systemctl start nginx")
+                        await run_command("sleep 2")
+                        retry_count += 1
+                    else:
+                        logger.info(f"域名 {domain} 已无法访问")
+                        break
+                except Exception:
                     logger.info(f"域名 {domain} 已无法访问")
+                    break
+
+                if retry_count == max_retries:
+                    raise Exception(f"无法完全删除站点 {domain} 的访问")
 
             return NginxResponse(
                 success=True,
