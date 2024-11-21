@@ -42,8 +42,16 @@ class NginxService:
             # 确保站点目录存在并设置权限
             site_root = get_site_root_path(site.domain)
             os.makedirs(site_root, exist_ok=True)
+            
+            # 设置目录权限
             await run_command(f"chown -R {nginx_user} {site_root}")
             await run_command(f"chmod -R 755 {site_root}")
+            
+            # 确保日志目录存在
+            log_dir = "/var/log/nginx"
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir)
+            await run_command(f"chown -R {nginx_user} {log_dir}")
             
             # 生成配置文件
             config_content = generate_nginx_config(site)
@@ -52,6 +60,10 @@ class NginxService:
             # 写入配置文件
             async with aiofiles.open(config_path, 'w') as f:
                 await f.write(config_content)
+            
+            # 设置配置文件权限
+            await run_command(f"chown {nginx_user} {config_path}")
+            await run_command("chmod 644 {config_path}")
             
             # 创建软链接
             enabled_path = get_nginx_enabled_path(site.domain)
@@ -71,6 +83,12 @@ class NginxService:
             
             # 重启Nginx
             await self.restart_nginx()
+            
+            # 验证站点是否可访问
+            try:
+                await run_command(f"curl -s -I http://{site.domain} || true")
+            except Exception as e:
+                logger.warning(f"站点访问测试失败: {str(e)}")
             
             return NginxResponse(
                 success=True,

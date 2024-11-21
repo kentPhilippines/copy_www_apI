@@ -78,56 +78,95 @@ def generate_nginx_config(site: NginxSite) -> str:
         builder.add_server() \
             .add_listen(80) \
             .add_server_name(site.domain) \
-            .add_root(site.root_path) \
-            .add_index("index.html", "index.htm", "index.php" if site.php_enabled else "")
+            .add_root(site.root_path)
 
-        # 添加基本安全头
+        # 添加默认首页
         builder.config_parts.extend([
-            "    # Security headers",
-            "    add_header X-Frame-Options SAMEORIGIN;",
-            "    add_header X-Content-Type-Options nosniff;",
-            "    add_header X-XSS-Protection \"1; mode=block\";",
+            "    index index.html index.htm index.php;",
+            "    charset utf-8;",
+            "",
+            "    # 访问日志",
+            f"    access_log /var/log/nginx/{site.domain}.access.log;",
+            f"    error_log /var/log/nginx/{site.domain}.error.log;",
+            "",
+            "    # 基本设置",
+            "    sendfile on;",
+            "    tcp_nopush on;",
+            "    tcp_nodelay on;",
+            "    keepalive_timeout 65;",
+            "    types_hash_max_size 2048;",
+            ""
+        ])
+
+        # 添加基本location配置
+        builder.config_parts.extend([
+            "    location / {",
+            "        try_files $uri $uri/ /index.html =404;",
+            "    }",
+            "",
+            "    # 禁止访问隐藏文件",
+            "    location ~ /\\. {",
+            "        deny all;",
+            "        access_log off;",
+            "        log_not_found off;",
+            "    }",
             ""
         ])
 
         if site.php_enabled:
-            builder.add_php_config()
-
-        # 基础location配置
-        builder.add_location("/", {
-            "try_files": "$uri $uri/ /index.php?$query_string" if site.php_enabled else "$uri $uri/ =404"
-        })
+            builder.config_parts.extend([
+                "    location ~ \\.php$ {",
+                "        fastcgi_split_path_info ^(.+\\.php)(/.+)$;",
+                "        fastcgi_pass unix:/var/run/php-fpm/php-fpm.sock;",
+                "        fastcgi_index index.php;",
+                "        include fastcgi_params;",
+                "        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;",
+                "        fastcgi_param PATH_INFO $fastcgi_path_info;",
+                "    }",
+                ""
+            ])
 
         builder.end_server()
 
         # HTTPS配置
-        if site.ssl_enabled:
+        if site.ssl_enabled and site.ssl_certificate and site.ssl_certificate_key:
             builder.add_server() \
                 .add_listen(443, ssl=True) \
                 .add_server_name(site.domain) \
-                .add_root(site.root_path) \
-                .add_index("index.html", "index.htm", "index.php" if site.php_enabled else "")
+                .add_root(site.root_path)
 
             # SSL配置
             builder.config_parts.extend([
-                "    # SSL Configuration",
+                "    ssl_certificate " + site.ssl_certificate + ";",
+                "    ssl_certificate_key " + site.ssl_certificate_key + ";",
                 "    ssl_protocols TLSv1.2 TLSv1.3;",
+                "    ssl_ciphers HIGH:!aNULL:!MD5;",
                 "    ssl_prefer_server_ciphers on;",
-                "    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;",
-                "    ssl_session_timeout 1d;",
-                "    ssl_session_cache shared:SSL:50m;",
-                "    ssl_stapling on;",
-                "    ssl_stapling_verify on;",
-                "    add_header Strict-Transport-Security \"max-age=31536000\" always;",
+                "    ssl_session_cache shared:SSL:10m;",
+                "    ssl_session_timeout 10m;",
+                "",
+                "    index index.html index.htm index.php;",
+                "    charset utf-8;",
+                "",
+                "    location / {",
+                "        try_files $uri $uri/ /index.html =404;",
+                "    }",
                 ""
             ])
 
             if site.php_enabled:
-                builder.add_php_config()
-
-            builder.add_location("/", {
-                "try_files": "$uri $uri/ /index.php?$query_string" if site.php_enabled else "$uri $uri/ =404"
-            })
+                builder.config_parts.extend([
+                    "    location ~ \\.php$ {",
+                    "        fastcgi_split_path_info ^(.+\\.php)(/.+)$;",
+                    "        fastcgi_pass unix:/var/run/php-fpm/php-fpm.sock;",
+                    "        fastcgi_index index.php;",
+                    "        include fastcgi_params;",
+                    "        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;",
+                    "        fastcgi_param PATH_INFO $fastcgi_path_info;",
+                    "        fastcgi_param HTTPS on;",
+                    "    }",
+                    ""
+                ])
 
             builder.end_server()
 
