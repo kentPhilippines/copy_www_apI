@@ -108,6 +108,7 @@ class NginxService:
         try:
             config_path = get_nginx_config_path(domain)
             enabled_path = get_nginx_enabled_path(domain)
+            site_root = get_site_root_path(domain)
             
             # 删除配置文件
             if os.path.exists(config_path):
@@ -117,8 +118,18 @@ class NginxService:
             if os.path.exists(enabled_path):
                 os.remove(enabled_path)
             
+            # 删除站点目录（可选）
+            if os.path.exists(site_root):
+                await run_command(f"rm -rf {site_root}")
+            
             # 重新加载配置
             await self.reload()
+            
+            # 清理缓存（可选）
+            try:
+                await run_command("nginx -s flush_cache")
+            except:
+                pass
             
             return NginxResponse(
                 success=True,

@@ -239,13 +239,23 @@ class DeployService:
                         domain=request.domain,
                         email=request.ssl_email
                     )
-                    ssl_info = {
-                        "cert_path": f"/etc/letsencrypt/live/{request.domain}/fullchain.pem",
-                        "key_path": f"/etc/letsencrypt/live/{request.domain}/privkey.pem",
-                        "expiry": ssl_result.get("expiry") if ssl_result else None
-                    }
+                    if ssl_result.get("success"):
+                        ssl_info = {
+                            "cert_path": ssl_result["cert_path"],
+                            "key_path": ssl_result["key_path"]
+                        }
+                        
+                        # 更新Nginx配置以使用SSL
+                        nginx_site.ssl_enabled = True
+                        nginx_site.ssl_certificate = ssl_result["cert_path"]
+                        nginx_site.ssl_certificate_key = ssl_result["key_path"]
+                        
+                        # 重新生成配置并重载Nginx
+                        await self.nginx_service.create_site(nginx_site)
+                        
                 except Exception as e:
                     logger.error(f"SSL证书配置失败: {str(e)}")
+                    # 继续部署，但不启用SSL
 
             # 准备返回信息
             deployment_info = {
@@ -323,10 +333,18 @@ class DeployService:
     async def remove_site(self, domain: str) -> DeployResponse:
         """移除站点"""
         try:
+            # 先删除SSL证书（如果存在）
+            try:
+                await self.ssl_service.delete_certificate(domain)
+            except Exception as e:
+                logger.warning(f"删除SSL证书失败: {str(e)}")
+
+            # 删除站点配置和文件
             await self.nginx_service.delete_site(domain)
+
             return DeployResponse(
                 success=True,
-                message=f"站点 {domain} 已移除"
+                message=f"站点 {domain} 已完全移除"
             )
         except Exception as e:
             logger.error(f"移除站点失败: {str(e)}")

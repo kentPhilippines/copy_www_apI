@@ -1,90 +1,80 @@
-import os
-from datetime import datetime
-from typing import List
-from app.schemas.ssl import SSLCertRequest, SSLCertInfo, SSLResponse
+from typing import Optional, Dict, Any
 from app.utils.shell import run_command
+from app.core.logger import setup_logger
+import os
+
+logger = setup_logger(__name__)
 
 class SSLService:
-    CERTBOT_PATH = "/etc/letsencrypt/live"
+    """SSL证书服务"""
 
-    async def create_certificate(self, request: SSLCertRequest) -> SSLResponse:
-        """申请SSL证书"""
+    async def create_certificate(self, domain: str, email: Optional[str] = None) -> Dict[str, Any]:
+        """
+        申请SSL证书
+        
+        Args:
+            domain: 域名
+            email: 邮箱地址（可选）
+        """
         try:
-            # 使用certbot申请证书
-            cmd = f"certbot --nginx -d {request.domain}"
-            if request.email:
-                cmd += f" --email {request.email}"
-            if request.staging:
-                cmd += " --staging"
-            if request.force_renewal:
-                cmd += " --force-renewal"
+            cmd = ["certbot", "certonly", "--nginx"]
             
-            await run_command(cmd)
+            # 添加域名
+            cmd.extend(["-d", domain])
             
-            return SSLResponse(
-                success=True,
-                message=f"SSL certificate for {request.domain} created successfully"
-            )
+            # 添加邮箱（如果提供）
+            if email:
+                cmd.extend(["--email", email])
+            else:
+                cmd.append("--register-unsafely-without-email")
+            
+            # 自动同意服务条款
+            cmd.append("--agree-tos")
+            
+            # 非交互模式
+            cmd.append("-n")
+            
+            # 执行命令
+            await run_command(" ".join(cmd))
+            
+            # 检查证书是否成功创建
+            cert_path = f"/etc/letsencrypt/live/{domain}/fullchain.pem"
+            key_path = f"/etc/letsencrypt/live/{domain}/privkey.pem"
+            
+            if not (os.path.exists(cert_path) and os.path.exists(key_path)):
+                raise Exception("证书文件未创建")
+            
+            return {
+                "success": True,
+                "domain": domain,
+                "cert_path": cert_path,
+                "key_path": key_path
+            }
+            
         except Exception as e:
-            raise Exception(f"Failed to create SSL certificate: {str(e)}")
+            logger.error(f"SSL证书申请失败: {str(e)}")
+            raise
 
-    async def list_certificates(self) -> List[SSLCertInfo]:
-        """获取所有证书信息"""
-        certs = []
+    async def delete_certificate(self, domain: str) -> Dict[str, Any]:
+        """删除SSL证书"""
         try:
-            # 获取所有证书目录
-            for domain in os.listdir(self.CERTBOT_PATH):
-                cert_path = os.path.join(self.CERTBOT_PATH, domain)
-                if os.path.isdir(cert_path):
-                    # 获取证书信息
-                    cert_info = await self._get_cert_info(domain)
-                    if cert_info:
-                        certs.append(cert_info)
-            return certs
+            await run_command(f"certbot delete --cert-name {domain} -n")
+            return {
+                "success": True,
+                "message": f"证书 {domain} 已删除"
+            }
         except Exception as e:
-            raise Exception(f"Failed to list certificates: {str(e)}")
+            logger.error(f"SSL证书删除失败: {str(e)}")
+            raise
 
-    async def delete_certificate(self, domain: str) -> SSLResponse:
-        """删除证书"""
+    async def renew_certificate(self, domain: str) -> Dict[str, Any]:
+        """续期SSL证书"""
         try:
-            await run_command(f"certbot delete --cert-name {domain}")
-            return SSLResponse(
-                success=True,
-                message=f"SSL certificate for {domain} deleted successfully"
-            )
+            await run_command(f"certbot renew --cert-name {domain} --force-renewal -n")
+            return {
+                "success": True,
+                "message": f"证书 {domain} 已续期"
+            }
         except Exception as e:
-            raise Exception(f"Failed to delete certificate: {str(e)}")
-
-    async def renew_certificate(self, domain: str) -> SSLResponse:
-        """续期证书"""
-        try:
-            await run_command(f"certbot renew --cert-name {domain} --force-renewal")
-            return SSLResponse(
-                success=True,
-                message=f"SSL certificate for {domain} renewed successfully"
-            )
-        except Exception as e:
-            raise Exception(f"Failed to renew certificate: {str(e)}")
-
-    async def _get_cert_info(self, domain: str) -> SSLCertInfo:
-        """获取证书详细信息"""
-        try:
-            cert_path = os.path.join(self.CERTBOT_PATH, domain, "cert.pem")
-            if not os.path.exists(cert_path):
-                return None
-
-            # 使用OpenSSL获取证书信息
-            cmd = f"openssl x509 -in {cert_path} -noout -text"
-            cert_text = await run_command(cmd)
-
-            # 解析证书信息
-            # 这里需要实现证书信息解析逻辑
-            return SSLCertInfo(
-                domain=domain,
-                issuer="Let's Encrypt",
-                valid_from=datetime.now(),  # 需要从证书中解析
-                valid_to=datetime.now(),    # 需要从证书中解析
-                is_valid=True
-            )
-        except Exception:
-            return None 
+            logger.error(f"SSL证书续期失败: {str(e)}")
+            raise 
