@@ -54,8 +54,7 @@ def generate_nginx_config(site: NginxSite) -> str:
             f"    error_log /var/log/nginx/{site.domain}.error.log;",
             "",
             "    # Let's Encrypt 验证目录",
-            "    location /.well-known/acme-challenge/ {",
-            "        root /var/www/html;",  # certbot 默认使用的验证目录
+            "    location /.well-known {",
             "        allow all;",
             "    }",
             "",
