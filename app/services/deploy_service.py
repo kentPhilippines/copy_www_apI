@@ -99,11 +99,11 @@ class DeployService:
     async def deploy_site(self, request: DeployRequest) -> DeployResponse:
         """部署新站点"""
         try:
-            # 创建基础的Nginx站点
+            # 先创建基础的Nginx站点（不带SSL）
             nginx_site = NginxSite(
                 domain=request.domain,
                 root_path=f"/var/www/{request.domain}",
-                ssl_enabled=request.enable_ssl
+                ssl_enabled=False  # 初始不启用SSL
             )
             
             # 创建站点
@@ -112,53 +112,71 @@ class DeployService:
             # 创建测试页面
             await self._create_test_page(request.domain, result.data["root_path"])
 
-            # 如果需要SSL，配置证书
+            # 如果请求启用SSL，尝试配置SSL
             ssl_info = None
             if request.enable_ssl:
                 try:
-                    # 先检查域名DNS解析
+                    # 检查域名DNS解析
                     if await self.ssl_service.verify_domain(request.domain):
                         ssl_result = await self.ssl_service.create_certificate(
                             domain=request.domain,
                             email=request.ssl_email
                         )
+                        
+                        # 只有在SSL证书成功生成时才更新配置
                         if ssl_result.get("success"):
                             ssl_info = {
                                 "cert_path": ssl_result["cert_path"],
                                 "key_path": ssl_result["key_path"]
                             }
-                            # 更新Nginx配置以使用SSL
-                            nginx_site.ssl_certificate = ssl_result["cert_path"]
-                            nginx_site.ssl_certificate_key = ssl_result["key_path"]
-                            
-                            # 重新生成配置并重载Nginx
-                            await self.nginx_service.create_site(nginx_site)
+                            logger.info(f"SSL证书生成成功: {request.domain}")
+                        else:
+                            logger.warning(f"SSL证书生成失败: {request.domain}")
                     else:
                         logger.warning(f"域名 {request.domain} DNS未解析，跳过SSL配置")
                 except Exception as e:
                     logger.error(f"SSL证书配置失败: {str(e)}")
+                    # SSL配置失败不影响站点部署
+
+            # 准备访问URL
+            access_urls = {
+                "http": f"http://{request.domain}",
+                "https": f"https://{request.domain}" if ssl_info else None
+            }
 
             # 准备返回数据
             response_data = {
                 **result.data,
-                "ssl_enabled": request.enable_ssl,
-                "ssl_info": ssl_info
+                "ssl_enabled": bool(ssl_info),
+                "ssl_info": ssl_info,
+                "access_urls": access_urls,
+                "test_commands": {
+                    "http": f"curl -I http://{request.domain}",
+                    "https": f"curl -I https://{request.domain}" if ssl_info else None,
+                    "dns": f"dig {request.domain}"
+                }
             }
             
             return DeployResponse(
                 success=True,
-                message=f"站点 {request.domain} 部署成功",
+                message=f"站点 {request.domain} 部署成功" + 
+                        (" (无SSL)" if not ssl_info else f" (含SSL)\n访问地址:\nHTTP: http://{request.domain}\nHTTPS: https://{request.domain}"),
                 data=response_data
             )
 
         except Exception as e:
             logger.error(f"部署失败: {str(e)}")
+            # 清理失败的部署
+            try:
+                await self.remove_site(request.domain)
+            except Exception as cleanup_error:
+                logger.error(f"清理失败的部署时出错: {str(cleanup_error)}")
             raise
 
     async def remove_site(self, domain: str) -> DeployResponse:
         """移除站点"""
         try:
-            # 先删除SSL证书（如果存在）
+            # 尝试删除SSL证书（如果存在）
             try:
                 await self.ssl_service.delete_certificate(domain)
             except Exception as e:

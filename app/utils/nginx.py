@@ -41,12 +41,11 @@ def generate_nginx_config(site: NginxSite) -> str:
     try:
         builder = NginxConfigBuilder()
         
-        # HTTP配置
+        # 基础配置
         builder.add_server() \
             .add_listen(80) \
             .add_server_name(site.domain)
 
-        # 添加基本配置
         builder.config_parts.extend([
             f"    root /var/www/{site.domain};",
             "    index index.html index.htm;",
@@ -54,7 +53,27 @@ def generate_nginx_config(site: NginxSite) -> str:
             f"    access_log /var/log/nginx/{site.domain}.access.log main;",
             f"    error_log /var/log/nginx/{site.domain}.error.log;",
             "",
-            "    # 主目录配置",
+            "    # SSL配置",
+            "    ssl_certificate /etc/letsencrypt/live/" + site.domain + "/fullchain.pem;",
+            "    ssl_certificate_key /etc/letsencrypt/live/" + site.domain + "/privkey.pem;",
+            "    ssl_session_timeout 1d;",
+            "    ssl_session_cache shared:SSL:50m;",
+            "    ssl_session_tickets off;",
+            "",
+            "    # SSL协议和加密套件",
+            "    ssl_protocols TLSv1.2 TLSv1.3;",
+            "    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;",
+            "    ssl_prefer_server_ciphers off;",
+            "",
+            "    # HSTS配置",
+            "    add_header Strict-Transport-Security \"max-age=63072000\" always;",
+            "",
+            "    # OCSP Stapling",
+            "    ssl_stapling on;",
+            "    ssl_stapling_verify on;",
+            "    resolver 8.8.8.8 8.8.4.4 valid=300s;",
+            "    resolver_timeout 5s;",
+            "",
             "    location / {",
             "        try_files $uri $uri/ /index.html;",
             "    }",
