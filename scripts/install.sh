@@ -68,6 +68,10 @@ EOF
             yum install -y nginx
         fi
 
+        # 安装certbot和依赖
+        yum install -y epel-release
+        yum install -y certbot python3-certbot-nginx python3-urllib3 python3-six python3-requests
+
     elif [ -f /etc/debian_version ]; then
         # Debian/Ubuntu系统
         info "检测到 Debian/Ubuntu 系统"
@@ -89,6 +93,10 @@ EOF
             git \
             lsof \
             libssl-dev
+
+        # 安装certbot和依赖
+        apt-get update
+        apt-get install -y certbot python3-certbot-nginx python3-urllib3 python3-six python3-requests
     else
         error "不支持的操作系统"
         exit 1
