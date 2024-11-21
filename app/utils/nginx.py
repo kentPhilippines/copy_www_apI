@@ -5,6 +5,7 @@ from app.core.config import settings
 from app.core.logger import setup_logger
 from app.core.exceptions import NginxError
 from app.schemas.nginx import NginxSite, NginxConfig
+from app.utils.shell import run_command
 
 logger = setup_logger("nginx_utils")
 
@@ -157,4 +158,29 @@ def create_nginx_directories():
 
 def get_site_root_path(domain: str) -> str:
     """获取站点根目录路径"""
-    return os.path.join(settings.WWW_ROOT, domain) 
+    return os.path.join(settings.WWW_ROOT, domain)
+
+async def get_nginx_user() -> str:
+    """获取Nginx运行用户"""
+    try:
+        # 尝试从nginx配置中获取用户
+        result = await run_command("nginx -T 2>/dev/null | grep 'user' | head -n1")
+        if result and 'user' in result:
+            user = result.split()[1].strip(';')
+            return user
+        
+        # 如果无法从配置获取，检查进程
+        result = await run_command("ps aux | grep 'nginx: master' | grep -v grep | awk '{print $1}' | head -n1")
+        if result:
+            return result.strip()
+        
+        # 根据系统类型返回默认用户
+        if os.path.exists('/etc/redhat-release'):
+            return 'nginx:nginx'  # CentOS/RHEL
+        else:
+            return 'www-data:www-data'  # Debian/Ubuntu
+    except:
+        # 如果都失败了，返回系统相关的默认值
+        if os.path.exists('/etc/redhat-release'):
+            return 'nginx:nginx'
+        return 'www-data:www-data' 

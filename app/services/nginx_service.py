@@ -8,7 +8,8 @@ from app.utils.nginx import (
     get_nginx_config_path,
     get_nginx_enabled_path,
     create_nginx_directories,
-    get_site_root_path
+    get_site_root_path,
+    get_nginx_user
 )
 from app.core.logger import setup_logger
 
@@ -57,10 +58,13 @@ class NginxService:
             # 创建必要的目录
             create_nginx_directories()
             
+            # 获取正确的Nginx用户
+            nginx_user = await get_nginx_user()
+            
             # 确保站点目录存在并设置权限
             site_root = get_site_root_path(site.domain)
             os.makedirs(site_root, exist_ok=True)
-            await run_command(f"chown -R www-data:www-data {site_root}")
+            await run_command(f"chown -R {nginx_user} {site_root}")
             await run_command(f"chmod -R 755 {site_root}")
             
             # 生成配置文件

@@ -10,6 +10,7 @@ from app.schemas.nginx import NginxSite
 from app.core.config import settings
 import aiofiles
 import datetime
+from app.utils.nginx import get_nginx_user
 
 logger = setup_logger(__name__)
 
@@ -25,8 +26,11 @@ class DeployService:
         try:
             os.makedirs(root_path, exist_ok=True)
             
+            # 获取正确的Nginx用户
+            nginx_user = await get_nginx_user()
+            
             # 设置正确的目录权限
-            await run_command(f"chown -R www-data:www-data {root_path}")
+            await run_command(f"chown -R {nginx_user} {root_path}")
             await run_command(f"chmod -R 755 {root_path}")
             
             if deploy_type == "static":
@@ -102,7 +106,7 @@ class DeployService:
                     await f.write(html_content)
                 
                 # 设置文件权限
-                await run_command(f"chown www-data:www-data {index_path}")
+                await run_command(f"chown {nginx_user} {index_path}")
                 await run_command(f"chmod 644 {index_path}")
                 
             else:  # PHP
@@ -190,7 +194,7 @@ class DeployService:
                     await f.write(php_content)
                 
                 # 设置文件权限
-                await run_command(f"chown www-data:www-data {index_path}")
+                await run_command(f"chown {nginx_user} {index_path}")
                 await run_command(f"chmod 644 {index_path}")
             
             logger.info(f"测试页面创建成功: {index_path}")
