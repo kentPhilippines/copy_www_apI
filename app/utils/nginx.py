@@ -41,51 +41,82 @@ def generate_nginx_config(site: NginxSite) -> str:
     try:
         builder = NginxConfigBuilder()
         
-        # 基础配置
+        # 检查SSL证书是否存在
+        cert_path = f"/etc/letsencrypt/live/{site.domain}/fullchain.pem"
+        key_path = f"/etc/letsencrypt/live/{site.domain}/privkey.pem"
+        has_ssl = os.path.exists(cert_path) and os.path.exists(key_path)
+
+        # HTTP配置（用于重定向或基本访问）
         builder.add_server() \
             .add_listen(80) \
             .add_server_name(site.domain)
 
-        builder.config_parts.extend([
-            f"    root /var/www/{site.domain};",
-            "    index index.html index.htm;",
-            "",
-            f"    access_log /var/log/nginx/{site.domain}.access.log main;",
-            f"    error_log /var/log/nginx/{site.domain}.error.log;",
-            "",
-            "    # Let's Encrypt 验证配置",
-            "    location ^~ /.well-known/acme-challenge/ {",
-            f"        root /var/www/{site.domain};",  # 使用站点自己的目录
-            "        try_files $uri =404;",
-            "        allow all;",
-            "    }",
-            "",
-            "    location / {",
-            "        try_files $uri $uri/ /index.html;",
-            "    }",
-            "",
-            "    # 静态文件缓存",
-            "    location ~* \\.(jpg|jpeg|png|gif|ico|css|js)$ {",
-            "        expires 30d;",
-            "        add_header Cache-Control \"public, no-transform\";",
-            "    }",
-            "",
-            "    # 禁止访问隐藏文件",
-            "    location ~ /\\. {",
-            "        deny all;",
-            "        access_log off;",
-            "        log_not_found off;",
-            "    }",
-            ""
-        ])
-
-        # 检查SSL证书是否存在
-        cert_path = f"/etc/letsencrypt/live/{site.domain}/fullchain.pem"
-        key_path = f"/etc/letsencrypt/live/{site.domain}/privkey.pem"
-        
-        if os.path.exists(cert_path) and os.path.exists(key_path):
-            # 只有在证书文件存在时才添加SSL配置
+        if has_ssl:
+            # 如果有SSL证书，HTTP只用于重定向
             builder.config_parts.extend([
+                "    # HTTP重定向到HTTPS",
+                "    location / {",
+                "        return 301 https://$server_name$request_uri;",
+                "    }",
+                "",
+                "    # Let's Encrypt 验证配置",
+                "    location ^~ /.well-known/acme-challenge/ {",
+                f"        root /var/www/{site.domain};",
+                "        try_files $uri =404;",
+                "        allow all;",
+                "    }",
+                ""
+            ])
+        else:
+            # 如果没有SSL，HTTP提供完整服务
+            builder.config_parts.extend([
+                f"    root /var/www/{site.domain};",
+                "    index index.html index.htm;",
+                "",
+                f"    access_log /var/log/nginx/{site.domain}.access.log main;",
+                f"    error_log /var/log/nginx/{site.domain}.error.log;",
+                "",
+                "    # Let's Encrypt 验证配置",
+                "    location ^~ /.well-known/acme-challenge/ {",
+                f"        root /var/www/{site.domain};",
+                "        try_files $uri =404;",
+                "        allow all;",
+                "    }",
+                "",
+                "    location / {",
+                "        try_files $uri $uri/ /index.html;",
+                "    }",
+                "",
+                "    # 静态文件缓存",
+                "    location ~* \\.(jpg|jpeg|png|gif|ico|css|js)$ {",
+                "        expires 30d;",
+                "        add_header Cache-Control \"public, no-transform\";",
+                "    }",
+                "",
+                "    # 禁止访问隐藏文件",
+                "    location ~ /\\. {",
+                "        deny all;",
+                "        access_log off;",
+                "        log_not_found off;",
+                "    }",
+                ""
+            ])
+
+        builder.end_server()
+
+        # HTTPS配置
+        if has_ssl:
+            builder.add_server() \
+                .add_listen(443, ssl=True) \
+                .add_server_name(site.domain)
+
+            builder.config_parts.extend([
+                f"    root /var/www/{site.domain};",
+                "    index index.html index.htm;",
+                "",
+                f"    access_log /var/log/nginx/{site.domain}.access.log main;",
+                f"    error_log /var/log/nginx/{site.domain}.error.log;",
+                "",
                 "    # SSL配置",
                 f"    ssl_certificate {cert_path};",
                 f"    ssl_certificate_key {key_path};",
@@ -106,10 +137,27 @@ def generate_nginx_config(site: NginxSite) -> str:
                 "    ssl_stapling_verify on;",
                 "    resolver 8.8.8.8 8.8.4.4 valid=300s;",
                 "    resolver_timeout 5s;",
+                "",
+                "    location / {",
+                "        try_files $uri $uri/ /index.html;",
+                "    }",
+                "",
+                "    # 静态文件缓存",
+                "    location ~* \\.(jpg|jpeg|png|gif|ico|css|js)$ {",
+                "        expires 30d;",
+                "        add_header Cache-Control \"public, no-transform\";",
+                "    }",
+                "",
+                "    # 禁止访问隐藏文件",
+                "    location ~ /\\. {",
+                "        deny all;",
+                "        access_log off;",
+                "        log_not_found off;",
+                "    }",
                 ""
             ])
 
-        builder.end_server()
+            builder.end_server()
 
         return builder.build()
 
