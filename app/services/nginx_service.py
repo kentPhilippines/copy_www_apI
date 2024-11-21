@@ -15,6 +15,19 @@ class NginxService:
         """确保Nginx用户存在"""
         return "nginx:nginx"
 
+    async def restart_nginx(self):
+        """重启Nginx服务"""
+        try:
+            # 先测试配置
+            await run_command("nginx -t")
+            # 重启服务
+            await run_command("systemctl restart nginx")
+            await run_command("sleep 2")  # 等待服务启动
+            logger.info("Nginx服务重启成功")
+        except Exception as e:
+            logger.error(f"Nginx服务重启失败: {str(e)}")
+            raise
+
     async def _init_nginx_config(self):
         """初始化Nginx配置"""
         try:
