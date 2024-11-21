@@ -216,7 +216,10 @@ class DeployService:
                 domain=request.domain,
                 root_path=root_path,
                 php_enabled=request.deploy_type == "php",
-                ssl_enabled=request.enable_ssl
+                ssl_enabled=request.enable_ssl,
+                # 初始化时不设置SSL证书路径
+                ssl_certificate=None,
+                ssl_certificate_key=None
             )
             
             # 创建站点
@@ -235,27 +238,29 @@ class DeployService:
             ssl_info = None
             if request.enable_ssl:
                 try:
-                    ssl_result = await self.ssl_service.create_certificate(
-                        domain=request.domain,
-                        email=request.ssl_email
-                    )
-                    if ssl_result.get("success"):
-                        ssl_info = {
-                            "cert_path": ssl_result["cert_path"],
-                            "key_path": ssl_result["key_path"]
-                        }
-                        
-                        # 更新Nginx配置以使用SSL
-                        nginx_site.ssl_enabled = True
-                        nginx_site.ssl_certificate = ssl_result["cert_path"]
-                        nginx_site.ssl_certificate_key = ssl_result["key_path"]
-                        
-                        # 重新生成配置并重载Nginx
-                        await self.nginx_service.create_site(nginx_site)
-                        
+                    # 先检查域名DNS解析
+                    if await self.ssl_service.verify_domain(request.domain):
+                        ssl_result = await self.ssl_service.create_certificate(
+                            domain=request.domain,
+                            email=request.ssl_email
+                        )
+                        if ssl_result.get("success"):
+                            ssl_info = {
+                                "cert_path": ssl_result["cert_path"],
+                                "key_path": ssl_result["key_path"],
+                                "cert_info": ssl_result.get("cert_info")
+                            }
+                            # 更新Nginx配置以使用SSL
+                            nginx_site.ssl_enabled = True
+                            nginx_site.ssl_certificate = ssl_result["cert_path"]
+                            nginx_site.ssl_certificate_key = ssl_result["key_path"]
+                            
+                            # 重新生成配置并重载Nginx
+                            await self.nginx_service.create_site(nginx_site)
+                    else:
+                        logger.warning(f"域名 {request.domain} DNS未解析，跳过SSL配置")
                 except Exception as e:
-                    logger.error(f"SSL证��配置失败: {str(e)}")
-                    # 继续部署，但不启用SSL
+                    logger.error(f"SSL证书配置失败: {str(e)}")
 
             # 准备返回信息
             deployment_info = {
@@ -269,13 +274,6 @@ class DeployService:
                 "urls": test_urls,
                 "ssl": ssl_info
             }
-
-            # 在所有操作完成后，确保重启Nginx
-            try:
-                await self.nginx_service.restart_nginx()
-            except Exception as e:
-                logger.error(f"Nginx重启失败: {str(e)}")
-                # 继续返回结果，但记录错误
 
             return DeployResponse(
                 success=True,

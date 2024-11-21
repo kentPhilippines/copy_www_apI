@@ -102,80 +102,97 @@ class NginxService:
     async def delete_site(self, domain: str) -> NginxResponse:
         """删除站点配置"""
         try:
-            config_path = get_nginx_config_path(domain)
-            enabled_path = get_nginx_enabled_path(domain)
-            site_root = get_site_root_path(domain)
-            
-            # 删除配置文件
-            if os.path.exists(config_path):
-                os.remove(config_path)
-                logger.info(f"删除配置文件: {config_path}")
-            
-            # 删除软链接
-            if os.path.exists(enabled_path):
-                os.remove(enabled_path)
-                logger.info(f"删除软链接: {enabled_path}")
-            
-            # 删除站点目录
-            if os.path.exists(site_root):
-                await run_command(f"rm -rf {site_root}")
-                logger.info(f"删除站点目录: {site_root}")
-            
-            # 删除日志文件
-            log_files = [
+            # 先停止Nginx服务
+            await run_command("systemctl stop nginx")
+            logger.info("Nginx服务已停止")
+
+            # 删除所有相关文件和目录
+            paths_to_delete = [
+                # Nginx配置文件
+                f"/etc/nginx/sites-available/{domain}.conf",
+                f"/etc/nginx/sites-enabled/{domain}.conf",
+                # 站点目录
+                f"/var/www/{domain}",
+                # 日志文件
                 f"/var/log/nginx/{domain}.access.log",
-                f"/var/log/nginx/{domain}.error.log"
+                f"/var/log/nginx/{domain}.error.log",
+                # 可能的SSL证书目录
+                f"/etc/letsencrypt/live/{domain}",
+                f"/etc/letsencrypt/archive/{domain}",
+                f"/etc/letsencrypt/renewal/{domain}.conf"
             ]
-            for log_file in log_files:
-                if os.path.exists(log_file):
-                    os.remove(log_file)
-                    logger.info(f"删除日志文件: {log_file}")
+
+            for path in paths_to_delete:
+                if os.path.exists(path):
+                    if os.path.isdir(path):
+                        await run_command(f"rm -rf {path}")
+                    else:
+                        os.remove(path)
+                    logger.info(f"删除: {path}")
 
             # 清理Nginx缓存
-            try:
-                # 停止Nginx
-                await run_command("systemctl stop nginx")
-                logger.info("Nginx服务已停止")
+            cache_dirs = [
+                "/var/cache/nginx",
+                "/var/tmp/nginx",
+                "/run/nginx"  # 添加运行时目录
+            ]
 
-                # 清理缓存目录
-                cache_dirs = [
-                    "/var/cache/nginx",
-                    "/var/tmp/nginx"
-                ]
-                for cache_dir in cache_dirs:
-                    if os.path.exists(cache_dir):
-                        await run_command(f"rm -rf {cache_dir}/*")
-                        logger.info(f"清理缓存目录: {cache_dir}")
-
-                # 重新创建缓存目录
-                for cache_dir in cache_dirs:
+            for cache_dir in cache_dirs:
+                if os.path.exists(cache_dir):
+                    await run_command(f"rm -rf {cache_dir}/*")
+                    logger.info(f"清理缓存目录: {cache_dir}")
+                    # 重新创建目录
                     os.makedirs(cache_dir, exist_ok=True)
-                    nginx_user = await get_nginx_user()
+
+            # 重新设置缓存目录权限
+            nginx_user = await get_nginx_user()
+            for cache_dir in cache_dirs:
+                if os.path.exists(cache_dir):
                     await run_command(f"chown -R {nginx_user} {cache_dir}")
                     await run_command(f"chmod -R 755 {cache_dir}")
 
-                # 启动Nginx
-                await run_command("systemctl start nginx")
-                logger.info("Nginx服务已重启")
+            # 检查并删除可能存在的其他配置引用
+            nginx_conf = "/etc/nginx/nginx.conf"
+            if os.path.exists(nginx_conf):
+                # 创建备份
+                await run_command(f"cp {nginx_conf} {nginx_conf}.bak")
+                # 删除包含该域名的行
+                await run_command(f"sed -i '/{domain}/d' {nginx_conf}")
 
+            # 重新启动Nginx前，测试配置
+            try:
+                await run_command("nginx -t")
             except Exception as e:
-                logger.error(f"清理缓存失败: {str(e)}")
-                # 确保Nginx重新启动
-                try:
-                    await run_command("systemctl start nginx")
-                except:
-                    pass
+                logger.error(f"Nginx配置测试失败: {str(e)}")
+                # 如果测试失败，恢复备份
+                if os.path.exists(f"{nginx_conf}.bak"):
+                    await run_command(f"mv {nginx_conf}.bak {nginx_conf}")
                 raise
 
-            # 验证域名是否已经无法访问
+            # 启动Nginx
+            await run_command("systemctl start nginx")
+            logger.info("Nginx服务已重启")
+
+            # 等待几秒确保服务完全启动
+            await run_command("sleep 2")
+
+            # 验证域名是否确实无法访问
             try:
-                result = await run_command(f"curl -s -I http://{domain} || true")
+                result = await run_command(f"curl -s -I --connect-timeout 5 http://{domain} || true")
                 if "200 OK" in result or "301 Moved Permanently" in result:
-                    logger.warning(f"警告：域名 {domain} 仍然可以访问")
-                    # 强制重新加载Nginx配置
+                    logger.warning(f"警告：域名 {domain} 仍然可以访问，尝试强制重载配置")
+                    # 强制重载配置
                     await run_command("systemctl reload nginx")
-            except:
-                pass
+                    await run_command("systemctl restart nginx")
+                    # 再次验证
+                    result = await run_command(f"curl -s -I --connect-timeout 5 http://{domain} || true")
+                    if "200 OK" in result or "301 Moved Permanently" in result:
+                        raise Exception(f"无法完全删除站点 {domain} 的访问")
+            except Exception as e:
+                if "无法完全删除站点" in str(e):
+                    raise
+                else:
+                    logger.info(f"域名 {domain} 已无法访问")
 
             return NginxResponse(
                 success=True,

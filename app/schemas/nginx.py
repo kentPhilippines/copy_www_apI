@@ -10,6 +10,9 @@ class NginxConfig(BaseModel):
     ssl_enabled: bool = False
     ssl_certificate: Optional[str] = None
     ssl_certificate_key: Optional[str] = None
+    ssl_chain: Optional[str] = None
+    ssl_protocols: Optional[List[str]] = ["TLSv1.2", "TLSv1.3"]
+    ssl_ciphers: Optional[str] = "HIGH:!aNULL:!MD5"
 
 class NginxSite(BaseModel):
     """Nginx站点配置"""
@@ -17,6 +20,11 @@ class NginxSite(BaseModel):
     root_path: str
     php_enabled: bool = False
     ssl_enabled: bool = False
+    ssl_certificate: Optional[str] = None
+    ssl_certificate_key: Optional[str] = None
+    ssl_chain: Optional[str] = None
+    ssl_protocols: Optional[List[str]] = ["TLSv1.2", "TLSv1.3"]
+    ssl_ciphers: Optional[str] = "HIGH:!aNULL:!MD5"
 
 class NginxStatus(BaseModel):
     """Nginx状态"""
@@ -31,3 +39,4 @@ class NginxResponse(BaseModel):
     """Nginx操作响应"""
     success: bool
     message: str
+    data: Optional[dict] = None
