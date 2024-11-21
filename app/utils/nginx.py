@@ -81,26 +81,20 @@ def generate_nginx_config(site: NginxSite) -> str:
 
         # 添加基本配置
         builder.config_parts.extend([
-            f"    root {site.root_path};",
-            "    index index.html index.htm index.php;",
-            "    charset utf-8;",
+            f"    root /var/www/{site.domain};",  # 指向域名对应的静态文件目录
+            "    index index.html index.htm;",     # 默认首页文件
             "",
+            "    # 访问日志",
             f"    access_log /var/log/nginx/{site.domain}.access.log main;",
             f"    error_log /var/log/nginx/{site.domain}.error.log;",
             "",
-            "    # 基本设置",
-            "    client_max_body_size 100m;",
-            "    client_body_buffer_size 128k;",
-            "    client_header_buffer_size 1k;",
-            "",
-            "    # 安全设置",
-            "    add_header X-Frame-Options SAMEORIGIN;",
-            "    add_header X-Content-Type-Options nosniff;",
-            "    add_header X-XSS-Protection \"1; mode=block\";",
-            "",
             "    # 主目录配置",
             "    location / {",
-            "        try_files $uri $uri/ /index.html;",
+            "        try_files $uri $uri/ /index.html;",  # 尝试访问文件或目录，最后返回index.html
+            "    }",
+            "",
+            "    # 静态文件缓存",
+            "    location ~* \\.(jpg|jpeg|png|gif|ico|css|js)$ {",
             "        expires 30d;",
             "        add_header Cache-Control \"public, no-transform\";",
             "    }",
@@ -110,12 +104,6 @@ def generate_nginx_config(site: NginxSite) -> str:
             "        deny all;",
             "        access_log off;",
             "        log_not_found off;",
-            "    }",
-            "",
-            "    # 静态文件缓存",
-            "    location ~* \\.(jpg|jpeg|png|gif|ico|css|js)$ {",
-            "        expires 30d;",
-            "        add_header Cache-Control \"public, no-transform\";",
             "    }",
             ""
         ])
@@ -130,45 +118,51 @@ def generate_nginx_config(site: NginxSite) -> str:
                 "        include fastcgi_params;",
                 "        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;",
                 "        fastcgi_param PATH_INFO $fastcgi_path_info;",
-                "        fastcgi_intercept_errors on;",
-                "        fastcgi_buffer_size 128k;",
-                "        fastcgi_buffers 4 256k;",
-                "        fastcgi_busy_buffers_size 256k;",
                 "    }",
                 ""
             ])
 
         builder.end_server()
 
-        # HTTPS配置
+        # HTTPS配置（如果启用）
         if site.ssl_enabled and site.ssl_certificate and site.ssl_certificate_key:
             builder.add_server() \
                 .add_listen(443, ssl=True) \
                 .add_server_name(site.domain)
 
-            # SSL配置
             builder.config_parts.extend([
-                f"    root {site.root_path};",
-                "    index index.html index.htm index.php;",
-                "    charset utf-8;",
+                f"    root /var/www/{site.domain};",  # 同样的静态文件目录
+                "    index index.html index.htm;",
                 "",
                 "    # SSL配置",
                 f"    ssl_certificate {site.ssl_certificate};",
                 f"    ssl_certificate_key {site.ssl_certificate_key};",
                 "    ssl_protocols TLSv1.2 TLSv1.3;",
                 "    ssl_ciphers HIGH:!aNULL:!MD5;",
-                "    ssl_prefer_server_ciphers on;",
-                "    ssl_session_cache shared:SSL:10m;",
-                "    ssl_session_timeout 10m;",
                 "",
+                "    # 主目录配置",
                 "    location / {",
-                "        try_files $uri $uri/ /index.html =404;",
+                "        try_files $uri $uri/ /index.html;",
+                "    }",
+                "",
+                "    # 静态文件缓存",
+                "    location ~* \\.(jpg|jpeg|png|gif|ico|css|js)$ {",
+                "        expires 30d;",
+                "        add_header Cache-Control \"public, no-transform\";",
+                "    }",
+                "",
+                "    # 禁止访问隐藏文件",
+                "    location ~ /\\. {",
+                "        deny all;",
+                "        access_log off;",
+                "        log_not_found off;",
                 "    }",
                 ""
             ])
 
             if site.php_enabled:
                 builder.config_parts.extend([
+                    "    # PHP配置",
                     "    location ~ \\.php$ {",
                     "        fastcgi_split_path_info ^(.+\\.php)(/.+)$;",
                     "        fastcgi_pass unix:/var/run/php-fpm/php-fpm.sock;",

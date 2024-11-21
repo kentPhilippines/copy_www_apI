@@ -93,11 +93,9 @@ class NginxService:
             
             # 创建必要的目录结构
             dirs = [
-                "/etc/nginx/sites-available",
-                "/etc/nginx/sites-enabled",
-                "/var/www",
-                "/var/log/nginx",
-                "/etc/nginx/conf.d"
+                "/etc/nginx/conf.d",  # 站点配置目录
+                "/var/www",           # 静态文件根目录
+                "/var/log/nginx"      # 日志目录
             ]
             for dir_path in dirs:
                 os.makedirs(dir_path, exist_ok=True)
@@ -145,17 +143,8 @@ http {{
     gzip_comp_level 6;
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
 
-    # 默认配置
-    server {{
-        listen 80 default_server;
-        listen [::]:80 default_server;
-        server_name _;
-        return 444;
-    }}
-
-    # 包含其他配置
+    # 包含站点配置
     include /etc/nginx/conf.d/*.conf;
-    include /etc/nginx/sites-enabled/*.conf;
 }}
 """
             # 写入主配置文件
@@ -167,23 +156,18 @@ http {{
             await run_command(f"chown {nginx_user} {nginx_conf_path}")
             await run_command(f"chmod 644 {nginx_conf_path}")
 
-            # 禁用默认站点
-            default_site = "/etc/nginx/sites-enabled/default"
-            if os.path.exists(default_site):
-                os.remove(default_site)
-                logger.info("已禁用默认站点")
-
-            # 创建一个空的默认配置文件以确保目录不为空
-            default_conf_path = "/etc/nginx/sites-enabled/00-default.conf"
-            async with aiofiles.open(default_conf_path, 'w') as f:
-                await f.write("# Default configuration\n")
-
-            # 设置默认配置文件权限
-            await run_command(f"chown {nginx_user} {default_conf_path}")
-            await run_command(f"chmod 644 {default_conf_path}")
+            # 删除默认配置
+            default_conf = "/etc/nginx/conf.d/default.conf"
+            if os.path.exists(default_conf):
+                os.remove(default_conf)
+                logger.info("删除默认配置")
 
             # 测试配置
             await run_command("nginx -t")
+
+            # 重启Nginx以应用新配置
+            await run_command("systemctl restart nginx")
+            await run_command("sleep 2")  # 等待服务启动
 
             logger.info("Nginx配置初始化完成")
 
@@ -221,23 +205,14 @@ http {{
             nginx_user = await self._ensure_nginx_user()
             
             # 确保站点目录存在并设置权限
-            site_root = get_site_root_path(site.domain)
+            site_root = f"/var/www/{site.domain}"
             os.makedirs(site_root, exist_ok=True)
-            
-            # 设置目录权限
             await run_command(f"chown -R {nginx_user} {site_root}")
             await run_command(f"chmod -R 755 {site_root}")
             
-            # 确保日志目录存在
-            log_dir = "/var/log/nginx"
-            if not os.path.exists(log_dir):
-                os.makedirs(log_dir)
-            await run_command(f"chown -R {nginx_user} {log_dir}")
-            
             # 生成配置文件
             config_content = generate_nginx_config(site)
-            config_path = f"/etc/nginx/sites-available/{site.domain}.conf"
-            enabled_path = f"/etc/nginx/sites-enabled/{site.domain}.conf"
+            config_path = f"/etc/nginx/conf.d/{site.domain}.conf"
             
             # 写入配置文件
             async with aiofiles.open(config_path, 'w') as f:
@@ -247,44 +222,23 @@ http {{
             await run_command(f"chown {nginx_user} {config_path}")
             await run_command(f"chmod 644 {config_path}")
             
-            # 创建软链接前先删除可能存在的旧链接
-            if os.path.exists(enabled_path):
-                os.remove(enabled_path)
-            
-            # 创建软链接
-            os.symlink(config_path, enabled_path)
-            
             # 测试配置
             try:
                 await run_command("nginx -t")
             except Exception as e:
                 logger.error(f"Nginx配置测试失败: {str(e)}")
-                # 如果配置测试失败，删除配置文件和软链接
                 if os.path.exists(config_path):
                     os.remove(config_path)
-                if os.path.exists(enabled_path):
-                    os.remove(enabled_path)
                 raise
             
             # 重启Nginx
             await self.restart_nginx()
             
-            # 等待几秒让服务完全启动
+            # 等待服务启动
             await run_command("sleep 3")
             
             # 验证站点访问
-            max_retries = 3
-            retry_count = 0
-            while retry_count < max_retries:
-                if await self.verify_site_access(site.domain):
-                    break
-                retry_count += 1
-                if retry_count < max_retries:
-                    logger.warning(f"站点访问验证失败，重试 {retry_count}/{max_retries}")
-                    await run_command("nginx -s reload")
-                    await run_command("sleep 2")
-            
-            if retry_count == max_retries:
+            if not await self.verify_site_access(site.domain):
                 raise Exception(f"站点 {site.domain} 部署后无法访问")
             
             return NginxResponse(
