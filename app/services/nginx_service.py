@@ -59,6 +59,26 @@ class NginxService:
             logger.error(f"初始化Nginx配置失败: {str(e)}")
             raise
 
+    async def verify_site_access(self, domain: str) -> bool:
+        """验证站点是否可以访问"""
+        try:
+            # 使用curl检查站点访问
+            result = await run_command(f"curl -s -I http://{domain}")
+            if "200 OK" in result:
+                # 获取页面内容
+                content = await run_command(f"curl -s http://{domain}")
+                if "部署状态" in content:
+                    logger.info(f"站点 {domain} 可以正常访问测试页面")
+                    return True
+                else:
+                    logger.warning(f"站点 {domain} 返回了非预期的内容")
+            else:
+                logger.warning(f"站点 {domain} 返回了非200状态码")
+            return False
+        except Exception as e:
+            logger.error(f"验证站点访问失败: {str(e)}")
+            return False
+
     async def create_site(self, site: NginxSite) -> NginxResponse:
         """创建站点配置"""
         try:
@@ -125,11 +145,19 @@ class NginxService:
             # 重启Nginx
             await self.restart_nginx()
             
-            # 验证站点是否可访问
-            try:
-                await run_command(f"curl -s -I http://{site.domain} || true")
-            except Exception as e:
-                logger.warning(f"站点访问测试失败: {str(e)}")
+            # 等待几秒让服务完全启动
+            await run_command("sleep 3")
+            
+            # 验证站点访问
+            if not await self.verify_site_access(site.domain):
+                logger.error(f"站点 {site.domain} 无法访问，尝试重新加载配置")
+                # 尝试重新加载配置
+                await run_command("nginx -s reload")
+                await run_command("sleep 2")
+                
+                # 再次验证
+                if not await self.verify_site_access(site.domain):
+                    raise Exception(f"站点 {site.domain} 部署后无法访问")
             
             return NginxResponse(
                 success=True,

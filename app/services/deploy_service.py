@@ -24,6 +24,7 @@ class DeployService:
     async def _create_test_page(self, domain: str, root_path: str, deploy_type: str):
         """创建测试页面"""
         try:
+            # 确保目录存在
             os.makedirs(root_path, exist_ok=True)
             
             # 获取正确的Nginx用户
@@ -34,7 +35,7 @@ class DeployService:
             await run_command(f"chmod -R 755 {root_path}")
             
             if deploy_type == "static":
-                # 创建静态HTML测试页面
+                index_path = os.path.join(root_path, "index.html")
                 html_content = f"""
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -101,13 +102,23 @@ class DeployService:
 </body>
 </html>
 """
-                index_path = os.path.join(root_path, "index.html")
-                async with aiofiles.open(index_path, "w") as f:
+                # 写入文件并设置权限
+                async with aiofiles.open(index_path, 'w') as f:
                     await f.write(html_content)
                 
                 # 设置文件权限
                 await run_command(f"chown {nginx_user} {index_path}")
                 await run_command(f"chmod 644 {index_path}")
+                
+                # 验证文件是否创建成功
+                if not os.path.exists(index_path):
+                    raise Exception(f"测试页面文件未创建: {index_path}")
+                
+                # 验证文件内容
+                async with aiofiles.open(index_path, 'r') as f:
+                    content = await f.read()
+                    if not content:
+                        raise Exception("测试页面文件内容为空")
                 
             else:  # PHP
                 # 创建PHP测试页面
@@ -198,6 +209,10 @@ class DeployService:
                 await run_command(f"chmod 644 {index_path}")
             
             logger.info(f"测试页面创建成功: {index_path}")
+            
+            # 验证目录权限
+            result = await run_command(f"ls -l {root_path}")
+            logger.info(f"目录权限: {result}")
             
         except Exception as e:
             logger.error(f"创建测试页面失败: {str(e)}")
