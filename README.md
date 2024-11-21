@@ -45,13 +45,14 @@ chmod +x /scripts/install.sh
 ./scripts/install.sh
 ```
 ### 3. 启动服务
-bash
-启动API服务
+
+```bash
 ./scripts/start.sh
+```
 ### 4. 使用示例
 
 #### 部署新站点
-bash
+```bash
 curl -X POST http://localhost:8000/api/v1/deploy/sites \
 -H "Content-Type: application/json" \
 -d '{
@@ -59,6 +60,7 @@ curl -X POST http://localhost:8000/api/v1/deploy/sites \
 "enable_ssl": true,
 "ssl_email": "admin@example.com"
 }'
+```
 #### 删除站点
 ```bash
 curl -X DELETE http://localhost:8000/api/v1/deploy/sites/example.com
