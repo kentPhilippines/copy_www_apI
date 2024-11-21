@@ -57,16 +57,17 @@ install_system_deps() {
             openssl-devel \
             bind-utils
 
-        # 使用pip安装certbot和依赖
+        # 使用pip安装指定版本的certbot和依赖
         pip3 install --upgrade pip
         pip3 install \
-            certbot \
-            certbot-nginx \
-            requests \
-            urllib3 \
-            six \
-            cryptography \
-            pyOpenSSL
+            'certbot==1.20.0' \
+            'certbot-nginx==1.20.0' \
+            'requests==2.27.1' \
+            'urllib3==1.26.6' \
+            'six==1.16.0' \
+            'cryptography==3.3.2' \
+            'pyOpenSSL==20.0.1' \
+            'acme==1.20.0'
 
         # 创建certbot命令的软链接
         ln -sf /usr/local/bin/certbot /usr/bin/certbot
@@ -95,16 +96,17 @@ install_system_deps() {
             libssl-dev \
             dnsutils
 
-        # 使用pip安装certbot和依赖
+        # 使用pip安装指定版本的certbot和依赖
         pip3 install --upgrade pip
         pip3 install \
-            certbot \
-            certbot-nginx \
-            requests \
-            urllib3 \
-            six \
-            cryptography \
-            pyOpenSSL
+            'certbot==1.20.0' \
+            'certbot-nginx==1.20.0' \
+            'requests==2.27.1' \
+            'urllib3==1.26.6' \
+            'six==1.16.0' \
+            'cryptography==3.3.2' \
+            'pyOpenSSL==20.0.1' \
+            'acme==1.20.0'
 
         # 创建certbot命令的软链接
         ln -sf /usr/local/bin/certbot /usr/bin/certbot
@@ -115,6 +117,12 @@ install_system_deps() {
 
     # 确保certbot可执行
     chmod +x /usr/local/bin/certbot
+
+    # 创建必要的目录
+    mkdir -p /etc/letsencrypt
+    mkdir -p /var/log/letsencrypt
+    chmod 755 /etc/letsencrypt
+    chmod 755 /var/log/letsencrypt
 
     info "系统依赖安装完成"
 }
