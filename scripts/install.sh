@@ -38,11 +38,12 @@ install_system_deps() {
         # 更新系统
         yum update -y
         
+        # 卸载可能冲突的包
+        yum remove -y python3-urllib3 python3-requests python3-six certbot
+
         # 安装基础依赖
         yum install -y \
             nginx \
-            certbot \
-            python3-certbot-nginx \
             python3 \
             python3-pip \
             python3-devel \
@@ -56,26 +57,19 @@ install_system_deps() {
             openssl-devel \
             bind-utils
 
-        # 启用Nginx仓库（如果需要）
-        if ! command -v nginx &> /dev/null; then
-            warn "从Nginx官方仓库安装Nginx..."
-            cat > /etc/yum.repos.d/nginx.repo << EOF
-[nginx]
-name=nginx repo
-baseurl=http://nginx.org/packages/centos/\$releasever/\$basearch/
-gpgcheck=0
-enabled=1
-EOF
-            yum install -y nginx
-        fi
-
-        # 安装certbot和依赖
-        yum install -y \
+        # 使用pip安装certbot和依赖
+        pip3 install --upgrade pip
+        pip3 install \
             certbot \
-            python3-certbot-nginx \
-            python3-urllib3 \
-            python3-six \
-            python3-requests
+            certbot-nginx \
+            requests \
+            urllib3 \
+            six \
+            cryptography \
+            pyOpenSSL
+
+        # 创建certbot命令的软链接
+        ln -sf /usr/local/bin/certbot /usr/bin/certbot
 
     elif [ -f /etc/debian_version ]; then
         # Debian/Ubuntu系统
@@ -84,11 +78,12 @@ EOF
         # 更新包列表
         apt-get update
         
+        # 卸载可能冲突的包
+        apt-get remove -y python3-urllib3 python3-requests python3-six certbot
+
         # 安装依赖
         apt-get install -y \
             nginx \
-            certbot \
-            python3-certbot-nginx \
             python3 \
             python3-pip \
             python3-venv \
@@ -99,32 +94,29 @@ EOF
             lsof \
             libssl-dev \
             dnsutils
+
+        # 使用pip安装certbot和依赖
+        pip3 install --upgrade pip
+        pip3 install \
+            certbot \
+            certbot-nginx \
+            requests \
+            urllib3 \
+            six \
+            cryptography \
+            pyOpenSSL
+
+        # 创建certbot命令的软链接
+        ln -sf /usr/local/bin/certbot /usr/bin/certbot
     else
         error "不支持的操作系统"
         exit 1
     fi
 
-    # 配置Nginx服务
-    info "配置Nginx服务..."
-    
-    # 创建必要的目录
-    mkdir -p /etc/nginx/sites-available
-    mkdir -p /etc/nginx/sites-enabled
-    mkdir -p /var/www
-    mkdir -p /var/log/nginx
-    mkdir -p /etc/nginx/conf.d
-    
-    # 设置目录权限
-    if [ -f /etc/redhat-release ]; then
-        chown -R nginx:nginx /var/www
-    else
-        chown -R www-data:www-data /var/www
-    fi
-    chmod -R 755 /var/www
-    
-    # 启动Nginx
-    systemctl enable nginx
-    systemctl start nginx
+    # 确保certbot可执行
+    chmod +x /usr/local/bin/certbot
+
+    info "系统依赖安装完成"
 }
 
 # 配置Python环境
