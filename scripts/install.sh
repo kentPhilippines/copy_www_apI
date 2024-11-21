@@ -110,8 +110,15 @@ setup_python_env() {
     pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/
     pip config set install.trusted-host mirrors.aliyun.com
     
-    # 安装项目依赖
-    pip install -r requirements.txt
+    # 先安装关键依赖
+    info "安装关键依赖..."
+    pip install pydantic==1.8.2
+    pip install fastapi==0.65.2
+    pip install uvicorn==0.13.4
+    
+    # 安装其他依赖
+    info "安装其他依赖..."
+    pip install -r requirements.txt --no-deps
 }
 
 # 配置Nginx
