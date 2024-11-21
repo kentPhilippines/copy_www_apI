@@ -23,11 +23,9 @@ class NginxService:
             
             # 创建必要的目录结构
             dirs = [
-                "/etc/nginx/sites-available",
-                "/etc/nginx/sites-enabled",
+                "/etc/nginx/conf.d",
                 "/var/www",
-                "/var/log/nginx",
-                "/etc/nginx/conf.d"
+                "/var/log/nginx"
             ]
             for dir_path in dirs:
                 os.makedirs(dir_path, exist_ok=True)
@@ -75,9 +73,8 @@ http {{
     gzip_comp_level 6;
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
 
-    # 包含其他配置
+    # 包含站点配置
     include /etc/nginx/conf.d/*.conf;
-    include /etc/nginx/sites-enabled/*.conf;
 }}
 """
             # 写入主配置文件
@@ -89,16 +86,11 @@ http {{
             await run_command(f"chown {nginx_user} {nginx_conf_path}")
             await run_command(f"chmod 644 {nginx_conf_path}")
 
-            # 删除所有默认配置
-            default_files = [
-                "/etc/nginx/sites-enabled/default",
-                "/etc/nginx/sites-available/default",
-                "/etc/nginx/conf.d/default.conf"
-            ]
-            for file in default_files:
-                if os.path.exists(file):
-                    os.remove(file)
-                    logger.info(f"删除默认配置: {file}")
+            # 删除默认配置
+            default_conf = "/etc/nginx/conf.d/default.conf"
+            if os.path.exists(default_conf):
+                os.remove(default_conf)
+                logger.info("删除默认配置")
 
             # 创建新的默认配置
             default_conf = """
@@ -120,7 +112,7 @@ server {
     }
 }
 """
-            default_conf_path = "/etc/nginx/conf.d/00-default.conf"
+            default_conf_path = "/etc/nginx/conf.d/default.conf"
             async with aiofiles.open(default_conf_path, 'w') as f:
                 await f.write(default_conf)
 
