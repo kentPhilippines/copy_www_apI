@@ -18,182 +18,94 @@ error() {
     echo -e "${RED}[ERROR] $1${NC}"
 }
 
-# 检查是否以root运行
-if [ "$EUID" -ne 0 ]; then 
-    error "请使用root权限运行此脚本"
-    exit 1
-fi
-
-# 检测系统类型并安装依赖
-install_system_deps() {
-    info "安装系统依赖..."
+# 配置pip源
+setup_pip() {
+    info "配置pip源..."
     
-    if [ -f /etc/redhat-release ]; then
-        # CentOS/RHEL/Alibaba Cloud Linux系统
-        info "检测到 RHEL 系列系统"
-        
-        # 添加EPEL仓库
-        yum install -y epel-release
-        
-        # 更新系统
-        yum update -y
-        
-        # 安装基础依赖
-        yum install -y \
-            nginx \
-            certbot \
-            python3-certbot-nginx \
-            python3 \
-            python3-pip \
-            python3-devel \
-            gcc \
-            curl \
-            wget \
-            git \
-            lsof
+    # 创建pip配置目录
+    mkdir -p ~/.pip
+    
+    # 写入配置文件
+    cat > ~/.pip/pip.conf << EOF
+[global]
+timeout = 60
+index-url = https://mirrors.aliyun.com/pypi/simple/
+extra-index-url = 
+    https://pypi.tuna.tsinghua.edu.cn/simple
+    https://mirrors.cloud.tencent.com/pypi/simple
+    https://mirrors.huaweicloud.com/repository/pypi/simple
 
-        # 启用Nginx仓库（如果需要）
-        if ! command -v nginx &> /dev/null; then
-            warn "从Nginx官方仓库安装Nginx..."
-            cat > /etc/yum.repos.d/nginx.repo << EOF
-[nginx]
-name=nginx repo
-baseurl=http://nginx.org/packages/centos/\$releasever/\$basearch/
-gpgcheck=0
-enabled=1
+[install]
+trusted-host =
+    mirrors.aliyun.com
+    pypi.tuna.tsinghua.edu.cn
+    mirrors.cloud.tencent.com
+    mirrors.huaweicloud.com
 EOF
-            yum install -y nginx
+}
+
+# 安装Python包
+install_package() {
+    package=$1
+    max_retries=3
+    retry_count=0
+    
+    while [ $retry_count -lt $max_retries ]; do
+        if pip install "$package"; then
+            return 0
         fi
-
-    elif [ -f /etc/debian_version ]; then
-        # Debian/Ubuntu系统
-        info "检测到 Debian/Ubuntu 系统"
-        
-        # 更新包列表
-        apt-get update
-        
-        # 安装依赖
-        apt-get install -y \
-            nginx \
-            certbot \
-            python3-certbot-nginx \
-            python3 \
-            python3-pip \
-            python3-venv \
-            build-essential \
-            curl \
-            wget \
-            git \
-            lsof
-    else
-        error "不支持的操作系统"
-        exit 1
-    fi
-
-    # 配置Nginx服务
-    info "配置Nginx服务..."
+        retry_count=$((retry_count + 1))
+        warn "安装 $package 失败，尝试重试 ($retry_count/$max_retries)"
+        sleep 2
+    done
     
-    # 创建必要的目录
-    mkdir -p /etc/nginx/sites-available
-    mkdir -p /etc/nginx/sites-enabled
-    mkdir -p /var/www
-    
-    # 设置目录权限
-    chown -R nginx:nginx /var/www
-    chmod -R 755 /var/www
-    
-    # 启动Nginx
-    systemctl enable nginx
-    systemctl start nginx
-}
-
-# 配置Python环境
-setup_python_env() {
-    info "配置Python虚拟环境..."
-    
-    # 检查Python版本
-    PYTHON_VERSION=$(python3 -V 2>&1 | awk '{print $2}')
-    info "Python版本: $PYTHON_VERSION"
-    
-    # 创建虚拟环境
-    python3 -m venv venv
-    
-    # 激活虚拟环境
-    source venv/bin/activate
-    
-    # 升级pip
-    pip install --upgrade pip setuptools wheel
-    
-    # 设置阿里云PyPI镜像
-    pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/
-    pip config set install.trusted-host mirrors.aliyun.com
-    
-    # 先安装关键依赖
-    info "安装关键依赖..."
-    pip install pydantic==1.8.2
-    pip install fastapi==0.65.2
-    pip install uvicorn==0.13.4
-    
-    # 安装其他依赖
-    info "安装其他依赖..."
-    pip install -r requirements.txt --no-deps
-}
-
-# 配置项目目录
-setup_project_dirs() {
-    info "配置项目目录..."
-    
-    # 创建必要的目录
-    mkdir -p data logs
-    mkdir -p app/{core,db,api/v1/endpoints,schemas,models,services,utils,static,templates}
-    
-    # 创建必要的文件
-    find app -type d -exec touch {}/__init__.py \;
-    
-    # 设置权限
-    chmod 755 data logs
+    error "安装 $package 失败"
+    return 1
 }
 
 # 主安装流程
 main() {
-    info "开始安装 Nginx Deploy API..."
+    info "开始安装..."
     
-    # 安装系统依赖
-    install_system_deps
+    # 配置pip源
+    setup_pip
     
-    # 配置Python环境
-    setup_python_env
+    # 升级pip
+    python3 -m pip install --upgrade pip
     
-    # 配置项目目录
-    setup_project_dirs
+    # 安装基础依赖
+    basic_packages=(
+        "wheel"
+        "setuptools"
+        "fastapi==0.65.2"
+        "uvicorn==0.13.4"
+        "pydantic==1.8.2"
+    )
     
-    # 初始化数据库
-    info "初始化数据库..."
-    python3 -c "from app.core.init_db import init_db; init_db()"
+    for package in "${basic_packages[@]}"; do
+        info "安装 $package"
+        if ! install_package "$package"; then
+            error "基础依赖安装失败"
+            exit 1
+        fi
+    done
     
-    info "安装完成！"
-    info "你现在可以使用以下命令启动服务："
-    info "source venv/bin/activate && ./scripts/start.sh"
+    # 安装其他依赖
+    info "安装项目依赖..."
+    if ! pip install -r requirements.txt; then
+        # 如果整体安装失败，尝试逐个安装
+        while read -r package; do
+            # 跳过注释和空行
+            [[ $package =~ ^#.*$ ]] && continue
+            [[ -z $package ]] && continue
+            
+            info "安装 $package"
+            install_package "$package"
+        done < requirements.txt
+    fi
+    
+    info "安装完成"
 }
 
 # 执行安装
-main
-
-# 检查安装结果
-if [ $? -eq 0 ]; then
-    info "==================================="
-    info "安装成功！"
-    info "请检查以下服务是否正常运行："
-    echo ""
-    echo "Nginx状态：$(systemctl is-active nginx)"
-    echo "Python版本：$(python3 --version)"
-    echo ""
-    info "你可以通过以下命令启动API服务："
-    echo "cd $(pwd)"
-    echo "source venv/bin/activate"
-    echo "./scripts/start.sh"
-    info "==================================="
-else
-    error "安装过程中出现错误，请检查日志"
-    exit 1
-fi 
+main 
