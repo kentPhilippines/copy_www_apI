@@ -4,9 +4,8 @@
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# 打印带颜色的信息
 info() {
     echo -e "${GREEN}[INFO] $1${NC}"
 }
@@ -26,16 +25,20 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # 检测系统类型
-if [ -f /etc/os-release ]; then
-    . /etc/os-release
-    OS=$NAME
-    VERSION=$VERSION_ID
-else
-    error "无法检测操作系统类型"
-    exit 1
-fi
+detect_os() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        OS=$NAME
+        VERSION=$VERSION_ID
+    elif [ -f /etc/redhat-release ]; then
+        OS=$(cat /etc/redhat-release | cut -d' ' -f1)
+    else
+        error "无法检测操作系统类型"
+        exit 1
+    fi
 
-info "检测到操作系统: $OS $VERSION"
+    info "检测到操作系统: $OS $VERSION"
+}
 
 # 安装基础依赖
 install_dependencies() {
@@ -53,9 +56,14 @@ install_dependencies() {
             curl \
             wget \
             git
-    elif [[ "$OS" == *"CentOS"* ]] || [[ "$OS" == *"Red Hat"* ]]; then
-        yum update -y
+    elif [[ "$OS" == *"CentOS"* ]] || [[ "$OS" == *"Red Hat"* ]] || [[ "$OS" == *"Alibaba"* ]] || [[ "$OS" == *"Aliyun"* ]]; then
+        # 添加EPEL仓库
         yum install -y epel-release
+        
+        # 更新系统
+        yum update -y
+        
+        # 安装依赖
         yum install -y \
             python3 \
             python3-pip \
@@ -65,6 +73,19 @@ install_dependencies() {
             curl \
             wget \
             git
+            
+        # 启用Nginx仓库（如果需要）
+        if ! command -v nginx &> /dev/null; then
+            warn "从Nginx官方仓库安装Nginx..."
+            cat > /etc/yum.repos.d/nginx.repo << EOF
+[nginx]
+name=nginx repo
+baseurl=http://nginx.org/packages/centos/\$releasever/\$basearch/
+gpgcheck=0
+enabled=1
+EOF
+            yum install -y nginx
+        fi
     else
         error "不支持的操作系统: $OS"
         exit 1
@@ -98,7 +119,7 @@ setup_nginx() {
     mkdir -p /var/www
     
     # 设置目录权限
-    chown -R www-data:www-data /var/www
+    chown -R nginx:nginx /var/www
     chmod -R 755 /var/www
     
     # 启动Nginx
@@ -130,6 +151,9 @@ setup_directories() {
 # 主安装流程
 main() {
     info "开始安装 Nginx Deploy API..."
+    
+    # 检测系统
+    detect_os
     
     # 安装依赖
     install_dependencies
