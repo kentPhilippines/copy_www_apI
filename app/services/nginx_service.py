@@ -33,27 +33,91 @@ class NginxService:
     async def _init_nginx_config(self):
         """初始化Nginx配置"""
         try:
+            nginx_user = await get_nginx_user()
+            
+            # 创建必要的目录结构
+            dirs = [
+                "/etc/nginx/sites-available",
+                "/etc/nginx/sites-enabled",
+                "/var/www",
+                "/var/log/nginx",
+                "/etc/nginx/conf.d"
+            ]
+            for dir_path in dirs:
+                os.makedirs(dir_path, exist_ok=True)
+                await run_command(f"chown -R {nginx_user} {dir_path}")
+                await run_command(f"chmod -R 755 {dir_path}")
+
+            # 创建主配置文件
+            main_config = f"""
+user {nginx_user};
+worker_processes auto;
+pid /run/nginx.pid;
+
+events {{
+    worker_connections 1024;
+    multi_accept on;
+    use epoll;
+}}
+
+http {{
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+    server_tokens off;
+
+    # MIME
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    # 日志格式
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" "$http_x_forwarded_for"';
+
+    # 日志配置
+    access_log /var/log/nginx/access.log main;
+    error_log /var/log/nginx/error.log warn;
+
+    # Gzip压缩
+    gzip on;
+    gzip_disable "msie6";
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+    # 虚拟主机配置
+    include /etc/nginx/conf.d/*.conf;
+    include /etc/nginx/sites-enabled/*;
+}}
+"""
+            # 写入主配置文件
+            async with aiofiles.open("/etc/nginx/nginx.conf", 'w') as f:
+                await f.write(main_config)
+
             # 禁用默认站点
             default_site = "/etc/nginx/sites-enabled/default"
             if os.path.exists(default_site):
                 os.remove(default_site)
                 logger.info("已禁用默认站点")
 
-            # 确保配置目录存在
-            dirs = [
-                "/etc/nginx/sites-available",
-                "/etc/nginx/sites-enabled",
-                "/var/www",
-                "/var/log/nginx"
-            ]
-            for dir_path in dirs:
-                os.makedirs(dir_path, exist_ok=True)
+            # 创建默认的 conf.d 配置
+            default_conf = """
+# 默认配置
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+    return 444;
+}
+"""
+            async with aiofiles.open("/etc/nginx/conf.d/default.conf", 'w') as f:
+                await f.write(default_conf)
 
-            # 设置正确的权限
-            nginx_user = await get_nginx_user()
-            for dir_path in dirs:
-                await run_command(f"chown -R {nginx_user} {dir_path}")
-                await run_command(f"chmod -R 755 {dir_path}")
+            logger.info("Nginx配置初始化完成")
 
         except Exception as e:
             logger.error(f"初始化Nginx配置失败: {str(e)}")
