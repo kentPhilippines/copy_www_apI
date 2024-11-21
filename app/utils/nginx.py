@@ -53,6 +53,29 @@ def generate_nginx_config(site: NginxSite) -> str:
             f"    access_log /var/log/nginx/{site.domain}.access.log main;",
             f"    error_log /var/log/nginx/{site.domain}.error.log;",
             "",
+            "    # Let's Encrypt 验证目录",
+            "    location /.well-known/acme-challenge/ {",
+            "        root /var/www/html;",  # certbot 默认使用的验证目录
+            "        allow all;",
+            "    }",
+            "",
+            "    location / {",
+            "        try_files $uri $uri/ /index.html;",
+            "    }",
+            "",
+            "    # 静态文件缓存",
+            "    location ~* \\.(jpg|jpeg|png|gif|ico|css|js)$ {",
+            "        expires 30d;",
+            "        add_header Cache-Control \"public, no-transform\";",
+            "    }",
+            "",
+            "    # 禁止访问隐藏文件",
+            "    location ~ /\\. {",
+            "        deny all;",
+            "        access_log off;",
+            "        log_not_found off;",
+            "    }",
+            ""
         ])
 
         # 检查SSL证书是否存在
@@ -82,28 +105,8 @@ def generate_nginx_config(site: NginxSite) -> str:
                 "    ssl_stapling_verify on;",
                 "    resolver 8.8.8.8 8.8.4.4 valid=300s;",
                 "    resolver_timeout 5s;",
-                "",
+                ""
             ])
-
-        builder.config_parts.extend([
-            "    location / {",
-            "        try_files $uri $uri/ /index.html;",
-            "    }",
-            "",
-            "    # 静态文件缓存",
-            "    location ~* \\.(jpg|jpeg|png|gif|ico|css|js)$ {",
-            "        expires 30d;",
-            "        add_header Cache-Control \"public, no-transform\";",
-            "    }",
-            "",
-            "    # 禁止访问隐藏文件",
-            "    location ~ /\\. {",
-            "        deny all;",
-            "        access_log off;",
-            "        log_not_found off;",
-            "    }",
-            ""
-        ])
 
         builder.end_server()
 

@@ -99,22 +99,24 @@ class DeployService:
     async def deploy_site(self, request: DeployRequest) -> DeployResponse:
         """部署新站点"""
         try:
-            # 先创建基础的Nginx站点（不带SSL）
+            # 步骤1: 创建基础站点配置（不包含SSL）
+            logger.info(f"步骤1: 创建基础站点配置 - {request.domain}")
             nginx_site = NginxSite(
                 domain=request.domain,
                 root_path=f"/var/www/{request.domain}",
                 ssl_enabled=False  # 初始不启用SSL
             )
             
-            # 创建站点
+            # 创建基础站点
             result = await self.nginx_service.create_site(nginx_site)
             
             # 创建测试页面
             await self._create_test_page(request.domain, result.data["root_path"])
 
-            # 如果请求启用SSL，尝试配置SSL
+            # 步骤2: 如果需要SSL，申请证书
             ssl_info = None
             if request.enable_ssl:
+                logger.info(f"步骤2: 申请SSL证书 - {request.domain}")
                 try:
                     # 检查域名DNS解析
                     if await self.ssl_service.verify_domain(request.domain):
@@ -123,20 +125,27 @@ class DeployService:
                             email=request.ssl_email
                         )
                         
-                        # 只有在SSL证书成功生成时才更新配置
                         if ssl_result.get("success"):
                             ssl_info = {
                                 "cert_path": ssl_result["cert_path"],
                                 "key_path": ssl_result["key_path"]
                             }
-                            logger.info(f"SSL证书生成成功: {request.domain}")
+                            logger.info(f"SSL证书申请成功 - {request.domain}")
+
+                            # 步骤3: 更新Nginx配置，添加SSL
+                            logger.info(f"步骤3: 更新Nginx配置，添加SSL - {request.domain}")
+                            nginx_site.ssl_enabled = True
+                            nginx_site.ssl_certificate = ssl_result["cert_path"]
+                            nginx_site.ssl_certificate_key = ssl_result["key_path"]
+                            
+                            # 重新生成配置并重载Nginx
+                            await self.nginx_service.create_site(nginx_site)
                         else:
-                            logger.warning(f"SSL证书生成失败: {request.domain}")
+                            logger.warning(f"SSL证书申请失败 - {request.domain}")
                     else:
-                        logger.warning(f"域名 {request.domain} DNS未解析，跳过SSL配置")
+                        logger.warning(f"域名DNS未解析，跳过SSL配置 - {request.domain}")
                 except Exception as e:
-                    logger.error(f"SSL证书配置失败: {str(e)}")
-                    # SSL配置失败不影响站点部署
+                    logger.error(f"SSL配置失败: {str(e)}")
 
             # 准备访问URL
             access_urls = {
@@ -149,12 +158,7 @@ class DeployService:
                 **result.data,
                 "ssl_enabled": bool(ssl_info),
                 "ssl_info": ssl_info,
-                "access_urls": access_urls,
-                "test_commands": {
-                    "http": f"curl -I http://{request.domain}",
-                    "https": f"curl -I https://{request.domain}" if ssl_info else None,
-                    "dns": f"dig {request.domain}"
-                }
+                "access_urls": access_urls
             }
             
             return DeployResponse(
