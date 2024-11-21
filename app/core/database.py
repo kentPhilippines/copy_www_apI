@@ -7,15 +7,24 @@ import logging
 logger = logging.getLogger(__name__)
 
 # 创建数据库引擎
-engine = create_engine(
-    settings.DATABASE_URL,
-    pool_pre_ping=True,    # 自动检查连接是否有效
-    pool_size=10,          # 连接池大小
-    max_overflow=20,       # 超出连接池大小后最多创建的连接数
-    pool_recycle=3600,     # 连接重置时间(秒)
-    pool_timeout=30,       # 连接池获取连接的超时时间
-    echo=settings.DEBUG    # 是否打印SQL语句
-)
+# SQLite不支持连接池配置
+if settings.DATABASE_URL.startswith('sqlite'):
+    engine = create_engine(
+        settings.DATABASE_URL,
+        connect_args={"check_same_thread": False},  # SQLite需要这个配置来支持多线程
+        echo=settings.DEBUG
+    )
+else:
+    # 其他数据库（如MySQL）的配置
+    engine = create_engine(
+        settings.DATABASE_URL,
+        pool_pre_ping=True,
+        pool_size=10,
+        max_overflow=20,
+        pool_recycle=3600,
+        pool_timeout=30,
+        echo=settings.DEBUG
+    )
 
 # 创建会话工厂
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
