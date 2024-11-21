@@ -1,37 +1,41 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.endpoints import nginx, ssl, deploy
-from app.core.init_db import init_db
-import asyncio
+from app.core.init_db import initialize_database
+from app.core.config import settings
 
 app = FastAPI(
-    title="Nginx Deploy API",
-    description="API for managing Nginx deployments and SSL certificates",
+    title=settings.PROJECT_NAME,
+    description="Nginx Deploy API",
     version="1.0.0"
 )
 
 # CORS配置
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # 注册路由
-app.include_router(nginx.router, prefix="/api/v1/nginx", tags=["Nginx管理"])
-app.include_router(ssl.router, prefix="/api/v1/ssl", tags=["SSL证书管理"])
-app.include_router(deploy.router, prefix="/api/v1/deploy", tags=["站点部署"])
+app.include_router(nginx.router, prefix=f"{settings.API_V1_STR}/nginx", tags=["Nginx管理"])
+app.include_router(ssl.router, prefix=f"{settings.API_V1_STR}/ssl", tags=["SSL证书管理"])
+app.include_router(deploy.router, prefix=f"{settings.API_V1_STR}/deploy", tags=["站点部署"])
 
 @app.on_event("startup")
 async def startup_event():
-    # 初始化数据库
-    await init_db()
+    """启动时执行"""
+    await initialize_database()
 
 @app.get("/")
 async def root():
     return {
         "message": "Nginx Deploy API is running",
         "docs_url": "/docs"
-    } 
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000) 
