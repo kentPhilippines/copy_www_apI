@@ -1,8 +1,10 @@
 from typing import Dict, Optional
 import re
+import os
 from app.core.config import settings
 from app.core.logger import setup_logger
 from app.core.exceptions import NginxError
+from app.schemas.nginx import NginxSite, NginxConfig
 
 logger = setup_logger("nginx_utils")
 
@@ -66,49 +68,42 @@ class NginxConfigBuilder:
     def build(self) -> str:
         return "\n".join(self.config_parts)
 
-def generate_nginx_config(
-    domain: str,
-    root_path: str,
-    php_enabled: bool = False,
-    ssl_enabled: bool = False,
-    ssl_cert: Optional[str] = None,
-    ssl_key: Optional[str] = None
-) -> str:
-    """生成Nginx配置"""
+def generate_nginx_config(site: NginxSite) -> str:
+    """生成Nginx配置文件内容"""
     try:
         builder = NginxConfigBuilder()
         
         # HTTP配置
         builder.add_server() \
             .add_listen(80) \
-            .add_server_name(domain) \
-            .add_root(root_path) \
-            .add_index("index.html", "index.htm", "index.php" if php_enabled else "")
+            .add_server_name(site.domain) \
+            .add_root(site.root_path) \
+            .add_index("index.html", "index.htm", "index.php" if site.php_enabled else "")
 
-        if php_enabled:
+        if site.php_enabled:
             builder.add_php_config()
 
         # 基础location配置
         builder.add_location("/", {
-            "try_files": "$uri $uri/ /index.php?$query_string" if php_enabled else "$uri $uri/ =404"
+            "try_files": "$uri $uri/ /index.php?$query_string" if site.php_enabled else "$uri $uri/ =404"
         })
 
         builder.end_server()
 
         # HTTPS配置
-        if ssl_enabled and ssl_cert and ssl_key:
+        if site.ssl_enabled and site.ssl_certificate and site.ssl_certificate_key:
             builder.add_server() \
                 .add_listen(443, ssl=True) \
-                .add_server_name(domain) \
-                .add_root(root_path) \
-                .add_index("index.html", "index.htm", "index.php" if php_enabled else "") \
-                .add_ssl_config(ssl_cert, ssl_key)
+                .add_server_name(site.domain) \
+                .add_root(site.root_path) \
+                .add_index("index.html", "index.htm", "index.php" if site.php_enabled else "") \
+                .add_ssl_config(site.ssl_certificate, site.ssl_certificate_key)
 
-            if php_enabled:
+            if site.php_enabled:
                 builder.add_php_config()
 
             builder.add_location("/", {
-                "try_files": "$uri $uri/ /index.php?$query_string" if php_enabled else "$uri $uri/ =404"
+                "try_files": "$uri $uri/ /index.php?$query_string" if site.php_enabled else "$uri $uri/ =404"
             })
 
             builder.end_server()
@@ -116,10 +111,28 @@ def generate_nginx_config(
         return builder.build()
 
     except Exception as e:
-        logger.error(f"Failed to generate nginx config: {str(e)}")
+        logger.error(f"生成Nginx配置失败: {str(e)}")
         raise NginxError(f"Failed to generate nginx config: {str(e)}")
 
 def validate_domain(domain: str) -> bool:
     """验证域名格式"""
     pattern = r'^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
-    return bool(re.match(pattern, domain)) 
+    return bool(re.match(pattern, domain))
+
+def get_nginx_config_path(domain: str) -> str:
+    """获取Nginx配置文件路径"""
+    return os.path.join(settings.NGINX_SITES_PATH, f"{domain}.conf")
+
+def get_nginx_enabled_path(domain: str) -> str:
+    """获取Nginx启用配置文件路径"""
+    return os.path.join(settings.NGINX_ENABLED_PATH, f"{domain}.conf")
+
+def create_nginx_directories():
+    """创建Nginx必要目录"""
+    os.makedirs(settings.NGINX_SITES_PATH, exist_ok=True)
+    os.makedirs(settings.NGINX_ENABLED_PATH, exist_ok=True)
+    os.makedirs(settings.WWW_ROOT, exist_ok=True)
+
+def get_site_root_path(domain: str) -> str:
+    """获取站点根目录路径"""
+    return os.path.join(settings.WWW_ROOT, domain) 
