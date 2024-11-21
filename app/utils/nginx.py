@@ -53,8 +53,10 @@ def generate_nginx_config(site: NginxSite) -> str:
             f"    access_log /var/log/nginx/{site.domain}.access.log main;",
             f"    error_log /var/log/nginx/{site.domain}.error.log;",
             "",
-            "    # Let's Encrypt 验证目录",
-            "    location /.well-known {",
+            "    # Let's Encrypt 验证配置",
+            "    location ^~ /.well-known/acme-challenge/ {",
+            f"        root /var/www/{site.domain};",  # 使用站点自己的目录
+            "        try_files $uri =404;",
             "        allow all;",
             "    }",
             "",

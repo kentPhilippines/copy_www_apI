@@ -17,15 +17,23 @@ class SSLService:
             email: 邮箱地址（可选）
         """
         try:
+            # 确保验证目录存在
+            webroot_path = f"/var/www/{domain}"
+            os.makedirs(f"{webroot_path}/.well-known/acme-challenge", exist_ok=True)
+            
+            # 设置正确的权限
+            await run_command(f"chmod -R 755 {webroot_path}/.well-known")
+            await run_command(f"chown -R nginx:nginx {webroot_path}/.well-known")
+
             # 准备certbot命令
             cmd_parts = [
                 "certbot certonly",
-                "--webroot",  # 使用webroot方式验证
-                f"-w /var/www/{domain}",  # 指定网站根目录
-                f"-d {domain}",  # 指定域名
-                "--non-interactive",  # 非交互模式
-                "--agree-tos",  # 同意服务条款
-                "--preferred-challenges http-01"  # 使用HTTP验证
+                "--webroot",
+                f"-w {webroot_path}",  # 使用站点自己的目录
+                f"-d {domain}",
+                "--non-interactive",
+                "--agree-tos",
+                "--preferred-challenges http-01"
             ]
 
             # 添加邮箱或使用--register-unsafely-without-email
