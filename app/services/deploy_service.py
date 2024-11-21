@@ -6,6 +6,7 @@ from app.services.nginx_service import NginxService
 from app.services.ssl_service import SSLService
 from app.utils.shell import run_command
 from app.core.logger import setup_logger
+from app.schemas.nginx import NginxSite
 
 logger = setup_logger(__name__)
 
@@ -19,13 +20,13 @@ class DeployService:
     async def deploy_site(self, request: DeployRequest) -> DeployResponse:
         """部署新站点"""
         try:
-            # 创建Nginx配置
-            nginx_site = {
-                "domain": request.domain,
-                "root_path": f"/var/www/{request.domain}",
-                "php_enabled": request.deploy_type == "php",
-                "ssl_enabled": request.enable_ssl
-            }
+            # 创建NginxSite对象而不是字典
+            nginx_site = NginxSite(
+                domain=request.domain,
+                root_path=f"/var/www/{request.domain}",
+                php_enabled=request.deploy_type == "php",
+                ssl_enabled=request.enable_ssl
+            )
             
             # 创建站点
             await self.nginx_service.create_site(nginx_site)
