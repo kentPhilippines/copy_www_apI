@@ -57,6 +57,12 @@ class NginxService:
             # 创建必要的目录
             create_nginx_directories()
             
+            # 确保站点目录存在并设置权限
+            site_root = get_site_root_path(site.domain)
+            os.makedirs(site_root, exist_ok=True)
+            await run_command(f"chown -R www-data:www-data {site_root}")
+            await run_command(f"chmod -R 755 {site_root}")
+            
             # 生成配置文件
             config_content = generate_nginx_config(site)
             config_path = get_nginx_config_path(site.domain)
@@ -70,12 +76,16 @@ class NginxService:
             if not os.path.exists(enabled_path):
                 os.symlink(config_path, enabled_path)
             
-            # 创建站点目录
-            site_root = get_site_root_path(site.domain)
-            os.makedirs(site_root, exist_ok=True)
-            
             # 测试配置
-            await run_command("nginx -t")
+            try:
+                await run_command("nginx -t")
+            except Exception as e:
+                logger.error(f"Nginx配置测试失败: {str(e)}")
+                # 如果配置测试失败，删除配置文件和软链接
+                os.remove(config_path)
+                if os.path.exists(enabled_path):
+                    os.remove(enabled_path)
+                raise
             
             # 重新加载配置
             await self.reload()

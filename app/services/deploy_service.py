@@ -22,11 +22,16 @@ class DeployService:
 
     async def _create_test_page(self, domain: str, root_path: str, deploy_type: str):
         """创建测试页面"""
-        os.makedirs(root_path, exist_ok=True)
-        
-        if deploy_type == "static":
-            # 创建静态HTML测试页面
-            html_content = f"""
+        try:
+            os.makedirs(root_path, exist_ok=True)
+            
+            # 设置正确的目录权限
+            await run_command(f"chown -R www-data:www-data {root_path}")
+            await run_command(f"chmod -R 755 {root_path}")
+            
+            if deploy_type == "static":
+                # 创建静态HTML测试页面
+                html_content = f"""
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -92,12 +97,17 @@ class DeployService:
 </body>
 </html>
 """
-            async with aiofiles.open(os.path.join(root_path, "index.html"), "w") as f:
-                await f.write(html_content)
+                index_path = os.path.join(root_path, "index.html")
+                async with aiofiles.open(index_path, "w") as f:
+                    await f.write(html_content)
                 
-        else:  # PHP
-            # 创建PHP测试页面
-            php_content = f"""
+                # 设置文件权限
+                await run_command(f"chown www-data:www-data {index_path}")
+                await run_command(f"chmod 644 {index_path}")
+                
+            else:  # PHP
+                # 创建PHP测试页面
+                php_content = f"""
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -175,8 +185,19 @@ class DeployService:
 </body>
 </html>
 """
-            async with aiofiles.open(os.path.join(root_path, "index.php"), "w") as f:
-                await f.write(php_content)
+                index_path = os.path.join(root_path, "index.php")
+                async with aiofiles.open(index_path, "w") as f:
+                    await f.write(php_content)
+                
+                # 设置文件权限
+                await run_command(f"chown www-data:www-data {index_path}")
+                await run_command(f"chmod 644 {index_path}")
+            
+            logger.info(f"测试页面创建成功: {index_path}")
+            
+        except Exception as e:
+            logger.error(f"创建测试页面失败: {str(e)}")
+            raise
 
     async def deploy_site(self, request: DeployRequest) -> DeployResponse:
         """部署新站点"""

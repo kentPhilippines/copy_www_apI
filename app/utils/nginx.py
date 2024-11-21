@@ -80,6 +80,15 @@ def generate_nginx_config(site: NginxSite) -> str:
             .add_root(site.root_path) \
             .add_index("index.html", "index.htm", "index.php" if site.php_enabled else "")
 
+        # 添加基本安全头
+        builder.config_parts.extend([
+            "    # Security headers",
+            "    add_header X-Frame-Options SAMEORIGIN;",
+            "    add_header X-Content-Type-Options nosniff;",
+            "    add_header X-XSS-Protection \"1; mode=block\";",
+            ""
+        ])
+
         if site.php_enabled:
             builder.add_php_config()
 
@@ -91,7 +100,7 @@ def generate_nginx_config(site: NginxSite) -> str:
         builder.end_server()
 
         # HTTPS配置
-        if site.ssl_enabled and site.ssl_certificate and site.ssl_certificate_key:
+        if site.ssl_enabled:
             builder.add_server() \
                 .add_listen(443, ssl=True) \
                 .add_server_name(site.domain) \
