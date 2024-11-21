@@ -106,7 +106,7 @@ class NginxService:
 
             # 创建主配置文件
             main_config = f"""
-user {nginx_user};
+user nginx;  # 使用固定的nginx用户
 worker_processes auto;
 pid /run/nginx.pid;
 
@@ -151,12 +151,13 @@ http {{
 }}
 """
             # 写入主配置文件
-            async with aiofiles.open("/etc/nginx/nginx.conf", 'w') as f:
+            nginx_conf_path = "/etc/nginx/nginx.conf"
+            async with aiofiles.open(nginx_conf_path, 'w') as f:
                 await f.write(main_config)
 
             # 设置配置文件权限
-            await run_command(f"chown {nginx_user} /etc/nginx/nginx.conf")
-            await run_command("chmod 644 /etc/nginx/nginx.conf")
+            await run_command(f"chown {nginx_user} {nginx_conf_path}")
+            await run_command(f"chmod 644 {nginx_conf_path}")
 
             # 禁用默认站点
             default_site = "/etc/nginx/sites-enabled/default"
@@ -178,8 +179,12 @@ server {
             async with aiofiles.open(default_conf_path, 'w') as f:
                 await f.write(default_conf)
 
+            # 设置默认配置文件权限
             await run_command(f"chown {nginx_user} {default_conf_path}")
-            await run_command("chmod 644 {default_conf_path}")
+            await run_command(f"chmod 644 {default_conf_path}")
+
+            # 测试配置
+            await run_command("nginx -t")
 
             logger.info("Nginx配置初始化完成")
 
