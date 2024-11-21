@@ -72,113 +72,30 @@ class NginxConfigBuilder:
 def generate_nginx_config(site: NginxSite) -> str:
     """生成Nginx配置文件内容"""
     try:
-        builder = NginxConfigBuilder()
-        
-        # HTTP配置
-        builder.add_server() \
-            .add_listen(80) \
-            .add_server_name(site.domain)
+        return f"""server {{
+    listen 80;
+    server_name {site.domain};
+    root /var/www/{site.domain};
+    index index.html index.htm;
 
-        # 添加基本配置
-        builder.config_parts.extend([
-            f"    root /var/www/{site.domain};",  # 指向域名对应的静态文件目录
-            "    index index.html index.htm;",     # 默认首页文件
-            "",
-            "    # 访问日志",
-            f"    access_log /var/log/nginx/{site.domain}.access.log main;",
-            f"    error_log /var/log/nginx/{site.domain}.error.log;",
-            "",
-            "    # 主目录配置",
-            "    location / {",
-            "        try_files $uri $uri/ /index.html;",  # 尝试访问文件或目录，最后返回index.html
-            "    }",
-            "",
-            "    # 静态文件缓存",
-            "    location ~* \\.(jpg|jpeg|png|gif|ico|css|js)$ {",
-            "        expires 30d;",
-            "        add_header Cache-Control \"public, no-transform\";",
-            "    }",
-            "",
-            "    # 禁止访问隐藏文件",
-            "    location ~ /\\. {",
-            "        deny all;",
-            "        access_log off;",
-            "        log_not_found off;",
-            "    }",
-            ""
-        ])
+    access_log /var/log/nginx/{site.domain}.access.log main;
+    error_log /var/log/nginx/{site.domain}.error.log;
 
-        if site.php_enabled:
-            builder.config_parts.extend([
-                "    # PHP配置",
-                "    location ~ \\.php$ {",
-                "        fastcgi_split_path_info ^(.+\\.php)(/.+)$;",
-                "        fastcgi_pass unix:/var/run/php-fpm/php-fpm.sock;",
-                "        fastcgi_index index.php;",
-                "        include fastcgi_params;",
-                "        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;",
-                "        fastcgi_param PATH_INFO $fastcgi_path_info;",
-                "    }",
-                ""
-            ])
+    location / {{
+        try_files $uri $uri/ /index.html;
+    }}
 
-        builder.end_server()
+    location ~* \\.(jpg|jpeg|png|gif|ico|css|js)$ {{
+        expires 30d;
+        add_header Cache-Control "public, no-transform";
+    }}
 
-        # HTTPS配置（如果启用）
-        if site.ssl_enabled and site.ssl_certificate and site.ssl_certificate_key:
-            builder.add_server() \
-                .add_listen(443, ssl=True) \
-                .add_server_name(site.domain)
-
-            builder.config_parts.extend([
-                f"    root /var/www/{site.domain};",  # 同样的静态文件目录
-                "    index index.html index.htm;",
-                "",
-                "    # SSL配置",
-                f"    ssl_certificate {site.ssl_certificate};",
-                f"    ssl_certificate_key {site.ssl_certificate_key};",
-                "    ssl_protocols TLSv1.2 TLSv1.3;",
-                "    ssl_ciphers HIGH:!aNULL:!MD5;",
-                "",
-                "    # 主目录配置",
-                "    location / {",
-                "        try_files $uri $uri/ /index.html;",
-                "    }",
-                "",
-                "    # 静态文件缓存",
-                "    location ~* \\.(jpg|jpeg|png|gif|ico|css|js)$ {",
-                "        expires 30d;",
-                "        add_header Cache-Control \"public, no-transform\";",
-                "    }",
-                "",
-                "    # 禁止访问隐藏文件",
-                "    location ~ /\\. {",
-                "        deny all;",
-                "        access_log off;",
-                "        log_not_found off;",
-                "    }",
-                ""
-            ])
-
-            if site.php_enabled:
-                builder.config_parts.extend([
-                    "    # PHP配置",
-                    "    location ~ \\.php$ {",
-                    "        fastcgi_split_path_info ^(.+\\.php)(/.+)$;",
-                    "        fastcgi_pass unix:/var/run/php-fpm/php-fpm.sock;",
-                    "        fastcgi_index index.php;",
-                    "        include fastcgi_params;",
-                    "        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;",
-                    "        fastcgi_param PATH_INFO $fastcgi_path_info;",
-                    "        fastcgi_param HTTPS on;",
-                    "    }",
-                    ""
-                ])
-
-            builder.end_server()
-
-        return builder.build()
-
+    location ~ /\\. {{
+        deny all;
+        access_log off;
+        log_not_found off;
+    }}
+}}"""
     except Exception as e:
         logger.error(f"生成Nginx配置失败: {str(e)}")
         raise
