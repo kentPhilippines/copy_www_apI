@@ -57,7 +57,7 @@ install_system_deps() {
             openssl-devel \
             bind-utils
 
-        # 使用pip安装指定版本的certbot和依赖
+        # 使用pip安装指定版本的certbot和依赖  
         pip3 install --upgrade pip
         pip3 install \
             'certbot==1.20.0' \
