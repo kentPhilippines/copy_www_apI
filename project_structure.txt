@@ -1,0 +1,36 @@
+nginx-deploy-api/
+├── app/
+│   ├── api/
+│   │   ├── v1/
+│   │   │   ├── endpoints/
+│   │   │   │   ├── nginx.py      # Nginx管理API
+│   │   │   │   ├── deploy.py     # 部署管理API
+│   │   │   │   ├── ssl.py        # SSL证书管理API
+│   │   │   │   └── system.py     # 系统信息API
+│   │   │   └── api.py
+│   │   └── deps.py
+│   ├── core/
+│   │   ├── config.py             # 配置管理
+│   │   ├── security.py           # 安全相关
+│   │   └── settings.py           # 系统设置
+│   ├── services/
+│   │   ├── nginx_service.py      # Nginx服务
+│   │   ├── ssl_service.py        # SSL服务
+│   │   ├── deploy_service.py     # 部署服务
+│   │   └── system_service.py     # 系统服务
+│   └── utils/
+│       ├── shell.py              # Shell命令执行
+│       ├── nginx.py              # Nginx配置生成
+│       └── ssl.py                # SSL证书工具
+├── docker/
+│   ├── Dockerfile
+│   └── nginx/
+│       └── nginx.conf
+├── scripts/
+│   ├── setup.sh                  # 安装脚本
+│   └── deploy.sh                 # 部署脚本
+├── .env
+├── .dockerignore
+├── docker-compose.yml
+├── requirements.txt
+└── README.md 
