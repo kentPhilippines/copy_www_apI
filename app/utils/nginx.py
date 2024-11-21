@@ -105,8 +105,21 @@ def generate_nginx_config(site: NginxSite) -> str:
                 .add_listen(443, ssl=True) \
                 .add_server_name(site.domain) \
                 .add_root(site.root_path) \
-                .add_index("index.html", "index.htm", "index.php" if site.php_enabled else "") \
-                .add_ssl_config(site.ssl_certificate, site.ssl_certificate_key)
+                .add_index("index.html", "index.htm", "index.php" if site.php_enabled else "")
+
+            # SSL配置
+            builder.config_parts.extend([
+                "    # SSL Configuration",
+                "    ssl_protocols TLSv1.2 TLSv1.3;",
+                "    ssl_prefer_server_ciphers on;",
+                "    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;",
+                "    ssl_session_timeout 1d;",
+                "    ssl_session_cache shared:SSL:50m;",
+                "    ssl_stapling on;",
+                "    ssl_stapling_verify on;",
+                "    add_header Strict-Transport-Security \"max-age=31536000\" always;",
+                ""
+            ])
 
             if site.php_enabled:
                 builder.add_php_config()
@@ -121,7 +134,7 @@ def generate_nginx_config(site: NginxSite) -> str:
 
     except Exception as e:
         logger.error(f"生成Nginx配置失败: {str(e)}")
-        raise NginxError(f"Failed to generate nginx config: {str(e)}")
+        raise
 
 def validate_domain(domain: str) -> bool:
     """验证域名格式"""
