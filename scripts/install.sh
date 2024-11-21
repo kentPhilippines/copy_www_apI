@@ -55,7 +55,9 @@ install_dependencies() {
             python3-certbot-nginx \
             curl \
             wget \
-            git
+            git \
+            python3-dev \
+            gcc
     elif [[ "$OS" == *"CentOS"* ]] || [[ "$OS" == *"Red Hat"* ]] || [[ "$OS" == *"Alibaba"* ]] || [[ "$OS" == *"Aliyun"* ]]; then
         # 添加EPEL仓库
         yum install -y epel-release
@@ -63,29 +65,24 @@ install_dependencies() {
         # 更新系统
         yum update -y
         
-        # 安装依赖
+        # 安装SCL仓库以获取更新的Python版本
+        yum install -y centos-release-scl
+        
+        # 安装Python 3.8
         yum install -y \
-            python3 \
-            python3-pip \
+            rh-python38 \
+            rh-python38-python-devel \
+            gcc \
             nginx \
             certbot \
             python3-certbot-nginx \
             curl \
             wget \
             git
-            
-        # 启用Nginx仓库（如果需要）
-        if ! command -v nginx &> /dev/null; then
-            warn "从Nginx官方仓库安装Nginx..."
-            cat > /etc/yum.repos.d/nginx.repo << EOF
-[nginx]
-name=nginx repo
-baseurl=http://nginx.org/packages/centos/\$releasever/\$basearch/
-gpgcheck=0
-enabled=1
-EOF
-            yum install -y nginx
-        fi
+
+        # 设置Python 3.8为默认版本
+        source /opt/rh/rh-python38/enable
+        echo "source /opt/rh/rh-python38/enable" >> ~/.bashrc
     else
         error "不支持的操作系统: $OS"
         exit 1
@@ -96,6 +93,10 @@ EOF
 setup_python_env() {
     info "配置Python虚拟环境..."
     
+    # 检查Python版本
+    PYTHON_VERSION=$(python3 -V 2>&1 | awk '{print $2}')
+    info "Python版本: $PYTHON_VERSION"
+    
     # 创建虚拟环境
     python3 -m venv venv
     
@@ -103,7 +104,11 @@ setup_python_env() {
     source venv/bin/activate
     
     # 升级pip
-    pip install --upgrade pip
+    pip install --upgrade pip setuptools wheel
+    
+    # 设置阿里云PyPI镜像
+    pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/
+    pip config set install.trusted-host mirrors.aliyun.com
     
     # 安装项目依赖
     pip install -r requirements.txt

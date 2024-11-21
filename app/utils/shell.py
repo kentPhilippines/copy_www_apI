@@ -1,6 +1,6 @@
 import asyncio
 import subprocess
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List, Any
 from app.core.logger import setup_logger
 
 logger = setup_logger("shell_utils")
@@ -48,7 +48,7 @@ async def run_command(
         logger.error(f"Command execution failed: {str(e)}")
         raise
 
-async def run_commands(commands: list[str]) -> list[str]:
+async def run_commands(commands: List[str]) -> List[str]:
     """
     异步执行多个shell命令
     

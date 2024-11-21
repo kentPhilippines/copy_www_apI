@@ -18,15 +18,42 @@ error() {
     echo -e "${RED}[ERROR] $1${NC}"
 }
 
-# 检查是否在虚拟环境中
-if [[ "$VIRTUAL_ENV" == "" ]]; then
-    if [ -d "venv" ]; then
-        source venv/bin/activate
-    else
-        error "虚拟环境不存在，请先运行 install.sh"
-        exit 1
+# 检查并安装必要的命令
+check_commands() {
+    info "检查必要的命令..."
+    
+    # 检查并安装 lsof
+    if ! command -v lsof &> /dev/null; then
+        warn "正在安装 lsof..."
+        if command -v apt-get &> /dev/null; then
+            sudo apt-get update && sudo apt-get install -y lsof
+        elif command -v yum &> /dev/null; then
+            sudo yum install -y lsof
+        else
+            error "无法安装 lsof，请手动安装"
+            exit 1
+        fi
     fi
-fi
+}
+
+# 检查是否在虚拟环境中
+check_venv() {
+    if [[ "$VIRTUAL_ENV" == "" ]]; then
+        if [ -d "venv" ]; then
+            info "激活虚拟环境..."
+            source venv/bin/activate
+            
+            # 确保 uvicorn 已安装
+            if ! command -v uvicorn &> /dev/null; then
+                warn "正在安装 uvicorn..."
+                pip install uvicorn
+            fi
+        else
+            error "虚拟环境不存在，请先运行 install.sh"
+            exit 1
+        fi
+    fi
+}
 
 # 检查必要的服务
 check_services() {
@@ -35,7 +62,7 @@ check_services() {
     # 检查Nginx
     if ! systemctl is-active --quiet nginx; then
         warn "Nginx未运行，尝试启动..."
-        systemctl start nginx
+        sudo systemctl start nginx
     fi
     
     # 检查目录权限
@@ -56,23 +83,42 @@ setup_directories() {
     chmod 755 data logs
 }
 
+# 检查端口占用
+check_port() {
+    local port=$1
+    if command -v lsof &> /dev/null; then
+        if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null ; then
+            error "端口 $port 已被占用"
+            exit 1
+        fi
+    else
+        warn "lsof 未安装，跳过端口检查"
+    fi
+}
+
 # 启动API服务
 start_api() {
     info "启动API服务..."
     
-    # 检查端口是否被占用
-    if lsof -Pi :8000 -sTCP:LISTEN -t >/dev/null ; then
-        error "端口8000已被占用"
-        exit 1
-    fi
+    # 检查端口
+    check_port 8000
+    
+    # 确保requirements.txt中的依赖已安装
+    pip install -r requirements.txt
     
     # 启动服务
-    uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 }
 
 # 主流程
 main() {
     info "启动 Nginx Deploy API 服务..."
+    
+    # 检查命令
+    check_commands
+    
+    # 检查虚拟环境
+    check_venv
     
     # 检查服务
     check_services
