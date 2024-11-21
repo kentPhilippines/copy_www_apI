@@ -18,7 +18,29 @@ error() {
     echo -e "${RED}[ERROR] $1${NC}"
 }
 
-# 检查并安装必要的命令
+# 检查并创建虚拟环境
+setup_venv() {
+    if [ ! -d "venv" ]; then
+        info "创建虚拟环境..."
+        python3 -m venv venv
+        if [ $? -ne 0 ]; then
+            error "创建虚拟环境失败"
+            exit 1
+        fi
+        
+        info "安装依赖..."
+        source venv/bin/activate
+        pip install -r requirements.txt
+        if [ $? -ne 0 ]; then
+            error "安装依赖失败"
+            exit 1
+        fi
+    else
+        source venv/bin/activate
+    fi
+}
+
+# 检查必要的命令
 check_commands() {
     info "检查必要的命令..."
     
@@ -42,12 +64,6 @@ check_venv() {
         if [ -d "venv" ]; then
             info "激活虚拟环境..."
             source venv/bin/activate
-            
-            # 确保 uvicorn 已安装
-            if ! command -v uvicorn &> /dev/null; then
-                warn "正在安装 uvicorn..."
-                pip install uvicorn
-            fi
         else
             error "虚拟环境不存在，请先运行 install.sh"
             exit 1
@@ -119,6 +135,9 @@ main() {
     
     # 检查虚拟环境
     check_venv
+    
+    # 如果虚拟环境不存在，创建并安装依赖
+    setup_venv
     
     # 检查服务
     check_services
