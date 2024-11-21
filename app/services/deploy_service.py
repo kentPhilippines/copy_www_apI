@@ -254,7 +254,7 @@ class DeployService:
                         await self.nginx_service.create_site(nginx_site)
                         
                 except Exception as e:
-                    logger.error(f"SSL证书配置失败: {str(e)}")
+                    logger.error(f"SSL证��配置失败: {str(e)}")
                     # 继续部署，但不启用SSL
 
             # 准备返回信息
@@ -269,6 +269,13 @@ class DeployService:
                 "urls": test_urls,
                 "ssl": ssl_info
             }
+
+            # 在所有操作完成后，确保重启Nginx
+            try:
+                await self.nginx_service.restart_nginx()
+            except Exception as e:
+                logger.error(f"Nginx重启失败: {str(e)}")
+                # 继续返回结果，但记录错误
 
             return DeployResponse(
                 success=True,
@@ -341,6 +348,12 @@ class DeployService:
 
             # 删除站点配置和文件
             await self.nginx_service.delete_site(domain)
+            
+            # 确保Nginx重启
+            try:
+                await self.nginx_service.restart_nginx()
+            except Exception as e:
+                logger.error(f"Nginx重启失败: {str(e)}")
 
             return DeployResponse(
                 success=True,

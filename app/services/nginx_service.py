@@ -18,38 +18,16 @@ logger = setup_logger(__name__)
 class NginxService:
     """Nginx服务管理"""
 
-    async def get_status(self) -> NginxStatus:
-        """获取Nginx状态"""
+    async def restart_nginx(self):
+        """重启Nginx服务"""
         try:
-            # 检查Nginx进程
-            is_running = False
-            pid = None
-            version = None
-
-            try:
-                # 使用 ps 命令检查 Nginx 进程
-                ps_result = await run_command("ps aux | grep nginx | grep -v grep")
-                is_running = bool(ps_result.strip())
-                
-                if is_running:
-                    # 获取主进程PID
-                    pid_result = await run_command("pidof nginx")
-                    pid = pid_result.strip()
-                    
-                    # 获取Nginx版本
-                    version_result = await run_command("nginx -v 2>&1")
-                    version = version_result.strip()
-            except Exception:
-                # 如果命令失败，假设Nginx未运行
-                pass
-
-            return NginxStatus(
-                is_running=is_running,
-                pid=pid,
-                version=version
-            )
+            # 先测试配置
+            await run_command("nginx -t")
+            # 重启服务
+            await run_command("systemctl restart nginx")
+            logger.info("Nginx服务重启成功")
         except Exception as e:
-            logger.error(f"获取Nginx状态失败: {str(e)}")
+            logger.error(f"Nginx服务重启失败: {str(e)}")
             raise
 
     async def create_site(self, site: NginxSite) -> NginxResponse:
@@ -91,8 +69,8 @@ class NginxService:
                     os.remove(enabled_path)
                 raise
             
-            # 重新加载配置
-            await self.reload()
+            # 重启Nginx
+            await self.restart_nginx()
             
             return NginxResponse(
                 success=True,
@@ -118,18 +96,12 @@ class NginxService:
             if os.path.exists(enabled_path):
                 os.remove(enabled_path)
             
-            # 删除站点目录（可选）
+            # 删除站点目录
             if os.path.exists(site_root):
                 await run_command(f"rm -rf {site_root}")
             
-            # 重新加载配置
-            await self.reload()
-            
-            # 清理缓存（可选）
-            try:
-                await run_command("nginx -s flush_cache")
-            except:
-                pass
+            # 重启Nginx
+            await self.restart_nginx()
             
             return NginxResponse(
                 success=True,
@@ -138,32 +110,6 @@ class NginxService:
             
         except Exception as e:
             logger.error(f"删除站点失败: {str(e)}")
-            raise
-
-    async def list_sites(self) -> List[NginxSite]:
-        """获取所有站点配置"""
-        sites = []
-        try:
-            sites_path = "/etc/nginx/sites-enabled"
-            if os.path.exists(sites_path):
-                for filename in os.listdir(sites_path):
-                    if filename.endswith('.conf'):
-                        domain = filename[:-5]  # 移除.conf后缀
-                        config_path = os.path.join(sites_path, filename)
-                        
-                        async with aiofiles.open(config_path, 'r') as f:
-                            content = await f.read()
-                            
-                        # 解析配置文件获取信息
-                        sites.append(NginxSite(
-                            domain=domain,
-                            root_path=get_site_root_path(domain),
-                            php_enabled='php' in content.lower()
-                        ))
-            return sites
-            
-        except Exception as e:
-            logger.error(f"获取站点列表失败: {str(e)}")
             raise
 
     async def reload(self) -> NginxResponse:
