@@ -19,27 +19,23 @@ nginx-deploy-api/
 │   │   ├── nginx_service.py      # Nginx服务
 │   │   ├── ssl_service.py        # SSL服务
 │   │   └── deploy_service.py     # 部署服务
-│   ├── utils/
-│   │   ├── shell.py              # Shell命令工具
-│   │   └── nginx.py              # Nginx配置工具
-│   └── schemas/                  # 数据模型
-│       ├── nginx.py
-│       ├── ssl.py
-│       ├── deploy.py
-│       └── health.py
+│   └── utils/
+│       ├── shell.py              # Shell命令工具
+│       └── nginx.py              # Nginx配置工具
 ├── data/                         # 数据文件目录
-│   └── nginx_deploy.db           # SQLite数据库
 ├── logs/                         # 日志目录
 ├── scripts/
-│   ├── setup.sh                  # 安装脚本
-│   └── start.sh                  # 启动脚本
+│   ├── setup.sh                  # 环境配置脚本
+│   ├── install.sh                # 安装脚本
+│   ├── start.sh                  # 启动脚本
+│   ├── backup.sh                 # 备份脚本
+│   └── uninstall.sh             # 卸载脚本
 ├── tests/                        # 测试目录
-│   ├── api/
-│   ├── services/
-│   └── utils/
+│   ├── conftest.py
+│   ├── test_nginx.py
+│   ├── test_ssl.py
+│   └── test_deploy.py
 ├── .env                         # 环境变量
 ├── .gitignore
-├── docker-compose.yml           # Docker编排配置
-├── Dockerfile                   # Docker构建文件
 ├── requirements.txt             # 项目依赖
 └── README.md                    # 项目文档 

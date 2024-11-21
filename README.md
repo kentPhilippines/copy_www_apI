@@ -21,14 +21,11 @@
 
 ## 环境要求
 
-- Python 3.8+
+- Python 3.6+
 - Nginx
 - Certbot
-- Docker (可选)
 
 ## 快速开始
-
-### 安装
 
 1. 克隆项目：
 
@@ -36,26 +33,6 @@
 git clone https://github.com/kentPhilippines/copy_www_apI.git
 cd copy_www_apI
 ```
-
-### 使用 Docker（推荐）
-
-1. 克隆项目： 
-git clone https://github.com/kentPhilippines/copy_www_apI.git
-cd copy_www_apI
-2. 启动服务：docker-compose up --build
-
-### 手动部署
-
-1. 安装系统依赖：
-
-Ubuntu/Debian
-sudo apt-get update
-sudo apt-get install -y python3 python3-pip nginx certbot python3-certbot-nginx
-
-CentOS/RHEL
-sudo yum install -y python3 python3-pip nginx certbot python3-certbot-nginx
-2. 安装 Python 依赖：pip install -r requirements.txt
-3. 启动服务：chmod +x scripts/start.sh && ./scripts/start.sh
 
 ## API 文档
 
@@ -107,7 +84,6 @@ copy_www_apI/
 │ ├── services/ # 业务逻辑
 │ ├── schemas/ # 数据模型
 │ └── utils/ # 工具函数
-├── docker/ # Docker 配置
 ├── scripts/ # 脚本文件
 └── tests/ # 测试文件
 
