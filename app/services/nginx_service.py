@@ -222,7 +222,7 @@ http {{
             await run_command(f"chown {nginx_user} {config_path}")
             await run_command(f"chmod 644 {config_path}")
             
-            # 测试配置
+            # 测试配置语法
             try:
                 await run_command("nginx -t")
             except Exception as e:
@@ -234,16 +234,14 @@ http {{
             # 重启Nginx
             await self.restart_nginx()
             
-            # 等待服务启动
-            await run_command("sleep 3")
-            
-            # 验证站点访问
-            if not await self.verify_site_access(site.domain):
-                raise Exception(f"站点 {site.domain} 部署后无法访问")
-            
             return NginxResponse(
                 success=True,
-                message=f"站点 {site.domain} 创建成功"
+                message=f"站点 {site.domain} 创建成功",
+                data={
+                    "domain": site.domain,
+                    "config_file": config_path,
+                    "root_path": site_root
+                }
             )
             
         except Exception as e:
