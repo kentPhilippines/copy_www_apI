@@ -1,11 +1,17 @@
-from pydantic_settings import BaseSettings
+from pydantic import BaseSettings
 from typing import List
 import os
+from dotenv import load_dotenv
+
+# 加载.env文件
+load_dotenv()
 
 class Settings(BaseSettings):
-    # API配置
-    API_V1_STR: str = "/api/v1"
+    """系统配置"""
+    
+    # 项目信息
     PROJECT_NAME: str = "Nginx Deploy API"
+    API_V1_STR: str = "/api/v1"
     DEBUG: bool = False
     
     # 路径配置
@@ -28,4 +34,5 @@ class Settings(BaseSettings):
         case_sensitive = True
         env_file = ".env"
 
+# 创建设置实例
 settings = Settings() 
