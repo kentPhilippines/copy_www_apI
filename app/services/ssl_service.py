@@ -71,6 +71,7 @@ class SSLService:
             raise
 
     async def verify_domain(self, domain: str) -> bool:
+         
         """验证域名DNS是否已解析"""
         try:
             result = await run_command(f"dig +short {domain}")

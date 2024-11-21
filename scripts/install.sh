@@ -53,7 +53,8 @@ install_system_deps() {
             lsof \
             make \
             openssl \
-            openssl-devel
+            openssl-devel \
+            bind-utils
 
         # 启用Nginx仓库（如果需要）
         if ! command -v nginx &> /dev/null; then
@@ -69,8 +70,12 @@ EOF
         fi
 
         # 安装certbot和依赖
-        yum install -y epel-release
-        yum install -y certbot python3-certbot-nginx python3-urllib3 python3-six python3-requests
+        yum install -y \
+            certbot \
+            python3-certbot-nginx \
+            python3-urllib3 \
+            python3-six \
+            python3-requests
 
     elif [ -f /etc/debian_version ]; then
         # Debian/Ubuntu系统
@@ -92,11 +97,8 @@ EOF
             wget \
             git \
             lsof \
-            libssl-dev
-
-        # 安装certbot和依赖
-        apt-get update
-        apt-get install -y certbot python3-certbot-nginx python3-urllib3 python3-six python3-requests
+            libssl-dev \
+            dnsutils
     else
         error "不支持的操作系统"
         exit 1
