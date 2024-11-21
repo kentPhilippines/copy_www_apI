@@ -106,7 +106,7 @@ class NginxService:
 
             # 创建主配置文件
             main_config = f"""
-user nginx;  # 使用固定的nginx用户
+user nginx;
 worker_processes auto;
 pid /run/nginx.pid;
 
@@ -145,9 +145,17 @@ http {{
     gzip_comp_level 6;
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
 
-    # 虚拟主机配置
+    # 默认配置
+    server {{
+        listen 80 default_server;
+        listen [::]:80 default_server;
+        server_name _;
+        return 444;
+    }}
+
+    # 包含其他配置
     include /etc/nginx/conf.d/*.conf;
-    include /etc/nginx/sites-enabled/*;
+    include /etc/nginx/sites-enabled/*.conf;
 }}
 """
             # 写入主配置文件
@@ -165,19 +173,10 @@ http {{
                 os.remove(default_site)
                 logger.info("已禁用默认站点")
 
-            # 创建默认的 conf.d 配置
-            default_conf = """
-# 默认配置
-server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
-    server_name _;
-    return 444;
-}
-"""
-            default_conf_path = "/etc/nginx/conf.d/default.conf"
+            # 创建一个空的默认配置文件以确保目录不为空
+            default_conf_path = "/etc/nginx/sites-enabled/00-default.conf"
             async with aiofiles.open(default_conf_path, 'w') as f:
-                await f.write(default_conf)
+                await f.write("# Default configuration\n")
 
             # 设置默认配置文件权限
             await run_command(f"chown {nginx_user} {default_conf_path}")
