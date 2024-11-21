@@ -2,32 +2,39 @@ version: '3.8'
 
 services:
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nginx-deploy-api:latest
+    container_name: nginx-deploy-api
+    restart: unless-stopped
     ports:
       - "8000:8000"
       - "80:80"
       - "443:443"
     volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
       - /etc/nginx:/etc/nginx
       - /var/log/nginx:/var/log/nginx
       - /etc/letsencrypt:/etc/letsencrypt
-      - .:/app
+      - /var/lib/letsencrypt:/var/lib/letsencrypt
     environment:
-      - DB_HOST=db
-      - DB_USER=root
-      - DB_PASSWORD=your_password
-      - DB_NAME=nginx_deploy
-    depends_on:
-      - db
-    privileged: true  # 需要特权模式来管理系统服务
+      - TZ=Asia/Shanghai
+      - DEBUG=false
+    networks:
+      - nginx-network
+    privileged: true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
 
-  db:
-    image: mysql:5.7
-    environment:
-      - MYSQL_ROOT_PASSWORD=your_password
-      - MYSQL_DATABASE=nginx_deploy
-    volumes:
-      - mysql_data:/var/lib/mysql
+networks:
+  nginx-network:
+    driver: bridge
 
 volumes:
   mysql_data: 

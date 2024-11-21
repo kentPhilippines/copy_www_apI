@@ -4,33 +4,42 @@ nginx-deploy-api/
 │   │   ├── v1/
 │   │   │   ├── endpoints/
 │   │   │   │   ├── nginx.py      # Nginx管理API
-│   │   │   │   ├── deploy.py     # 部署管理API
 │   │   │   │   ├── ssl.py        # SSL证书管理API
-│   │   │   │   └── system.py     # 系统信息API
+│   │   │   │   ├── deploy.py     # 部署管理API
+│   │   │   │   └── health.py     # 健康检查API
 │   │   │   └── api.py
 │   │   └── deps.py
 │   ├── core/
 │   │   ├── config.py             # 配置管理
-│   │   ├── security.py           # 安全相关
-│   │   └── settings.py           # 系统设置
+│   │   ├── database.py           # 数据库配置
+│   │   ├── exceptions.py         # 异常定义
+│   │   ├── logger.py             # 日志配置
+│   │   └── init_db.py            # 数据库初始化
 │   ├── services/
 │   │   ├── nginx_service.py      # Nginx服务
 │   │   ├── ssl_service.py        # SSL服务
-│   │   ├── deploy_service.py     # 部署服务
-│   │   └── system_service.py     # 系统服务
-│   └── utils/
-│       ├── shell.py              # Shell命令执行
-│       ├── nginx.py              # Nginx配置生成
-│       └── ssl.py                # SSL证书工具
-├── docker/
-│   ├── Dockerfile
-│   └── nginx/
-│       └── nginx.conf
+│   │   └── deploy_service.py     # 部署服务
+│   ├── utils/
+│   │   ├── shell.py              # Shell命令工具
+│   │   └── nginx.py              # Nginx配置工具
+│   └── schemas/                  # 数据模型
+│       ├── nginx.py
+│       ├── ssl.py
+│       ├── deploy.py
+│       └── health.py
+├── data/                         # 数据文件目录
+│   └── nginx_deploy.db           # SQLite数据库
+├── logs/                         # 日志目录
 ├── scripts/
 │   ├── setup.sh                  # 安装脚本
-│   └── deploy.sh                 # 部署脚本
-├── .env
-├── .dockerignore
-├── docker-compose.yml
-├── requirements.txt
-└── README.md 
+│   └── start.sh                  # 启动脚本
+├── tests/                        # 测试目录
+│   ├── api/
+│   ├── services/
+│   └── utils/
+├── .env                         # 环境变量
+├── .gitignore
+├── docker-compose.yml           # Docker编排配置
+├── Dockerfile                   # Docker构建文件
+├── requirements.txt             # 项目依赖
+└── README.md                    # 项目文档 

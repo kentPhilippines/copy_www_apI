@@ -28,6 +28,15 @@
 
 ## 快速开始
 
+### 安装
+
+1. 克隆项目：
+
+```bash
+git clone https://github.com/kentPhilippines/copy_www_apI.git
+cd copy_www_apI
+```
+
 ### 使用 Docker（推荐）
 
 1. 克隆项目： 
