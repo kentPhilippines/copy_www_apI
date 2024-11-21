@@ -218,11 +218,8 @@ server {
             # 初始化Nginx配置
             await self._init_nginx_config()
             
-            # 创建必要的目录
-            create_nginx_directories()
-            
             # 获取正确的Nginx用户
-            nginx_user = await get_nginx_user()
+            nginx_user = await self._ensure_nginx_user()
             
             # 确保站点目录存在并设置权限
             site_root = get_site_root_path(site.domain)
@@ -240,11 +237,8 @@ server {
             
             # 生成配置文件
             config_content = generate_nginx_config(site)
-            config_path = get_nginx_config_path(site.domain)
-            
-            # 确保配置目录存在
-            config_dir = os.path.dirname(config_path)
-            os.makedirs(config_dir, exist_ok=True)
+            config_path = f"/etc/nginx/sites-available/{site.domain}.conf"
+            enabled_path = f"/etc/nginx/sites-enabled/{site.domain}.conf"
             
             # 写入配置文件
             async with aiofiles.open(config_path, 'w') as f:
@@ -254,13 +248,11 @@ server {
             await run_command(f"chown {nginx_user} {config_path}")
             await run_command(f"chmod 644 {config_path}")
             
-            # 创建软链接
-            enabled_path = get_nginx_enabled_path(site.domain)
-            enabled_dir = os.path.dirname(enabled_path)
-            os.makedirs(enabled_dir, exist_ok=True)
-            
+            # 创建软链接前先删除可能存在的旧链接
             if os.path.exists(enabled_path):
                 os.remove(enabled_path)
+            
+            # 创建软链接
             os.symlink(config_path, enabled_path)
             
             # 测试配置
@@ -282,15 +274,19 @@ server {
             await run_command("sleep 3")
             
             # 验证站点访问
-            if not await self.verify_site_access(site.domain):
-                logger.error(f"站点 {site.domain} 无法访问，尝试重新加载配置")
-                # 尝试重新加载配置
-                await run_command("nginx -s reload")
-                await run_command("sleep 2")
-                
-                # 再次验证
-                if not await self.verify_site_access(site.domain):
-                    raise Exception(f"站点 {site.domain} 部署后无法访问")
+            max_retries = 3
+            retry_count = 0
+            while retry_count < max_retries:
+                if await self.verify_site_access(site.domain):
+                    break
+                retry_count += 1
+                if retry_count < max_retries:
+                    logger.warning(f"站点访问验证失败，重试 {retry_count}/{max_retries}")
+                    await run_command("nginx -s reload")
+                    await run_command("sleep 2")
+            
+            if retry_count == max_retries:
+                raise Exception(f"站点 {site.domain} 部署后无法访问")
             
             return NginxResponse(
                 success=True,
@@ -317,11 +313,7 @@ server {
                 f"/var/www/{domain}",
                 # 日志文件
                 f"/var/log/nginx/{domain}.access.log",
-                f"/var/log/nginx/{domain}.error.log",
-                # 可能的SSL证书目录
-                f"/etc/letsencrypt/live/{domain}",
-                f"/etc/letsencrypt/archive/{domain}",
-                f"/etc/letsencrypt/renewal/{domain}.conf"
+                f"/var/log/nginx/{domain}.error.log"
             ]
 
             for path in paths_to_delete:
@@ -335,8 +327,7 @@ server {
             # 清理Nginx缓存
             cache_dirs = [
                 "/var/cache/nginx",
-                "/var/tmp/nginx",
-                "/run/nginx"  # 添加运行时目录
+                "/var/tmp/nginx"
             ]
 
             for cache_dir in cache_dirs:
@@ -346,62 +337,10 @@ server {
                     # 重新创建目录
                     os.makedirs(cache_dir, exist_ok=True)
 
-            # 重新设置缓存目录权限
-            nginx_user = await get_nginx_user()
-            for cache_dir in cache_dirs:
-                if os.path.exists(cache_dir):
-                    await run_command(f"chown -R {nginx_user} {cache_dir}")
-                    await run_command(f"chmod -R 755 {cache_dir}")
-
-            # 检查并删除可能存在的其他配置引用
-            nginx_conf = "/etc/nginx/nginx.conf"
-            if os.path.exists(nginx_conf):
-                # 创建备份
-                await run_command(f"cp {nginx_conf} {nginx_conf}.bak")
-                # 删除包含该域名的行
-                await run_command(f"sed -i '/{domain}/d' {nginx_conf}")
-
-            # 重新启动Nginx前，测试配置
-            try:
-                await run_command("nginx -t")
-            except Exception as e:
-                logger.error(f"Nginx配置测试失败: {str(e)}")
-                # 如果测试失败，恢复备份
-                if os.path.exists(f"{nginx_conf}.bak"):
-                    await run_command(f"mv {nginx_conf}.bak {nginx_conf}")
-                raise
-
-            # 完全停止并重启Nginx
-            await run_command("systemctl stop nginx")
-            await run_command("sleep 2")  # 等待服务完全停止
+            # 重新启动Nginx
             await run_command("systemctl start nginx")
-            await run_command("sleep 2")  # 等待服务完全启动
-            logger.info("Nginx服务已重启")
-
-            # 验证域名是否确实无法访问
-            max_retries = 3
-            retry_count = 0
-            while retry_count < max_retries:
-                try:
-                    result = await run_command(f"curl -s -I --connect-timeout 5 http://{domain} || true")
-                    if "200 OK" in result or "301 Moved Permanently" in result:
-                        logger.warning(f"警告：域名 {domain} 仍然可以访问，尝试强制重载配置")
-                        # 强制重载配置
-                        await run_command("systemctl stop nginx")
-                        await run_command("sleep 2")
-                        await run_command("systemctl start nginx")
-                        await run_command("sleep 2")
-                        retry_count += 1
-                    else:
-                        logger.info(f"域名 {domain} 已无法访问")
-                        break
-                except Exception:
-                    logger.info(f"域名 {domain} 已无法访问")
-                    break
-
-                if retry_count == max_retries:
-                    raise Exception(f"无法完全删除站点 {domain} 的访问")
-
+            await run_command("sleep 2")  # 等待服务启动
+            
             return NginxResponse(
                 success=True,
                 message=f"站点 {domain} 删除成功"
