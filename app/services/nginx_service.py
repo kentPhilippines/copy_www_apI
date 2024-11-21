@@ -109,18 +109,74 @@ class NginxService:
             # 删除配置文件
             if os.path.exists(config_path):
                 os.remove(config_path)
+                logger.info(f"删除配置文件: {config_path}")
             
             # 删除软链接
             if os.path.exists(enabled_path):
                 os.remove(enabled_path)
+                logger.info(f"删除软链接: {enabled_path}")
             
             # 删除站点目录
             if os.path.exists(site_root):
                 await run_command(f"rm -rf {site_root}")
+                logger.info(f"删除站点目录: {site_root}")
             
-            # 重启Nginx
-            await self.restart_nginx()
-            
+            # 删除日志文件
+            log_files = [
+                f"/var/log/nginx/{domain}.access.log",
+                f"/var/log/nginx/{domain}.error.log"
+            ]
+            for log_file in log_files:
+                if os.path.exists(log_file):
+                    os.remove(log_file)
+                    logger.info(f"删除日志文件: {log_file}")
+
+            # 清理Nginx缓存
+            try:
+                # 停止Nginx
+                await run_command("systemctl stop nginx")
+                logger.info("Nginx服务已停止")
+
+                # 清理缓存目录
+                cache_dirs = [
+                    "/var/cache/nginx",
+                    "/var/tmp/nginx"
+                ]
+                for cache_dir in cache_dirs:
+                    if os.path.exists(cache_dir):
+                        await run_command(f"rm -rf {cache_dir}/*")
+                        logger.info(f"清理缓存目录: {cache_dir}")
+
+                # 重新创建缓存目录
+                for cache_dir in cache_dirs:
+                    os.makedirs(cache_dir, exist_ok=True)
+                    nginx_user = await get_nginx_user()
+                    await run_command(f"chown -R {nginx_user} {cache_dir}")
+                    await run_command(f"chmod -R 755 {cache_dir}")
+
+                # 启动Nginx
+                await run_command("systemctl start nginx")
+                logger.info("Nginx服务已重启")
+
+            except Exception as e:
+                logger.error(f"清理缓存失败: {str(e)}")
+                # 确保Nginx重新启动
+                try:
+                    await run_command("systemctl start nginx")
+                except:
+                    pass
+                raise
+
+            # 验证域名是否已经无法访问
+            try:
+                result = await run_command(f"curl -s -I http://{domain} || true")
+                if "200 OK" in result or "301 Moved Permanently" in result:
+                    logger.warning(f"警告：域名 {domain} 仍然可以访问")
+                    # 强制重新加载Nginx配置
+                    await run_command("systemctl reload nginx")
+            except:
+                pass
+
             return NginxResponse(
                 success=True,
                 message=f"站点 {domain} 删除成功"
@@ -128,6 +184,11 @@ class NginxService:
             
         except Exception as e:
             logger.error(f"删除站点失败: {str(e)}")
+            # 确保Nginx在发生错误时也能重新启动
+            try:
+                await run_command("systemctl start nginx")
+            except:
+                pass
             raise
 
     async def reload(self) -> NginxResponse:
