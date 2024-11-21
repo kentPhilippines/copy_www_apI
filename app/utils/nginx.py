@@ -77,15 +77,14 @@ def generate_nginx_config(site: NginxSite) -> str:
         # HTTP配置
         builder.add_server() \
             .add_listen(80) \
-            .add_server_name(site.domain) \
-            .add_root(site.root_path)
+            .add_server_name(site.domain)
 
-        # 添加默认首页
+        # 添加基本配置
         builder.config_parts.extend([
+            f"    root {site.root_path};",
             "    index index.html index.htm index.php;",
             "    charset utf-8;",
             "",
-            "    # 访问日志",
             f"    access_log /var/log/nginx/{site.domain}.access.log;",
             f"    error_log /var/log/nginx/{site.domain}.error.log;",
             "",
@@ -95,20 +94,16 @@ def generate_nginx_config(site: NginxSite) -> str:
             "    tcp_nodelay on;",
             "    keepalive_timeout 65;",
             "    types_hash_max_size 2048;",
-            ""
-        ])
-
-        # 添加基本location配置
-        builder.config_parts.extend([
-            "    location / {",
-            "        try_files $uri $uri/ /index.html =404;",
-            "    }",
             "",
             "    # 禁止访问隐藏文件",
             "    location ~ /\\. {",
             "        deny all;",
             "        access_log off;",
             "        log_not_found off;",
+            "    }",
+            "",
+            "    location / {",
+            "        try_files $uri $uri/ /index.html =404;",
             "    }",
             ""
         ])
@@ -132,21 +127,22 @@ def generate_nginx_config(site: NginxSite) -> str:
         if site.ssl_enabled and site.ssl_certificate and site.ssl_certificate_key:
             builder.add_server() \
                 .add_listen(443, ssl=True) \
-                .add_server_name(site.domain) \
-                .add_root(site.root_path)
+                .add_server_name(site.domain)
 
             # SSL配置
             builder.config_parts.extend([
-                "    ssl_certificate " + site.ssl_certificate + ";",
-                "    ssl_certificate_key " + site.ssl_certificate_key + ";",
+                f"    root {site.root_path};",
+                "    index index.html index.htm index.php;",
+                "    charset utf-8;",
+                "",
+                "    # SSL配置",
+                f"    ssl_certificate {site.ssl_certificate};",
+                f"    ssl_certificate_key {site.ssl_certificate_key};",
                 "    ssl_protocols TLSv1.2 TLSv1.3;",
                 "    ssl_ciphers HIGH:!aNULL:!MD5;",
                 "    ssl_prefer_server_ciphers on;",
                 "    ssl_session_cache shared:SSL:10m;",
                 "    ssl_session_timeout 10m;",
-                "",
-                "    index index.html index.htm index.php;",
-                "    charset utf-8;",
                 "",
                 "    location / {",
                 "        try_files $uri $uri/ /index.html =404;",

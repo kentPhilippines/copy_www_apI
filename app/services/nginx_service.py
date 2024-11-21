@@ -30,9 +30,41 @@ class NginxService:
             logger.error(f"Nginx服务重启失败: {str(e)}")
             raise
 
+    async def _init_nginx_config(self):
+        """初始化Nginx配置"""
+        try:
+            # 禁用默认站点
+            default_site = "/etc/nginx/sites-enabled/default"
+            if os.path.exists(default_site):
+                os.remove(default_site)
+                logger.info("已禁用默认站点")
+
+            # 确保配置目录存在
+            dirs = [
+                "/etc/nginx/sites-available",
+                "/etc/nginx/sites-enabled",
+                "/var/www",
+                "/var/log/nginx"
+            ]
+            for dir_path in dirs:
+                os.makedirs(dir_path, exist_ok=True)
+
+            # 设置正确的权限
+            nginx_user = await get_nginx_user()
+            for dir_path in dirs:
+                await run_command(f"chown -R {nginx_user} {dir_path}")
+                await run_command(f"chmod -R 755 {dir_path}")
+
+        except Exception as e:
+            logger.error(f"初始化Nginx配置失败: {str(e)}")
+            raise
+
     async def create_site(self, site: NginxSite) -> NginxResponse:
         """创建站点配置"""
         try:
+            # 初始化Nginx配置
+            await self._init_nginx_config()
+            
             # 创建必要的目录
             create_nginx_directories()
             
