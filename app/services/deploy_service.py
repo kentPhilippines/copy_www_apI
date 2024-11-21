@@ -1,12 +1,15 @@
 import os
 import shutil
-from typing import List
+from typing import List, Dict
 from app.schemas.deploy import DeployRequest, DeployStatus, DeployResponse, SiteInfo
 from app.services.nginx_service import NginxService
 from app.services.ssl_service import SSLService
 from app.utils.shell import run_command
 from app.core.logger import setup_logger
 from app.schemas.nginx import NginxSite
+from app.core.config import settings
+import aiofiles
+import datetime
 
 logger = setup_logger(__name__)
 
@@ -17,34 +20,225 @@ class DeployService:
         self.nginx_service = NginxService()
         self.ssl_service = SSLService()
 
+    async def _create_test_page(self, domain: str, root_path: str, deploy_type: str):
+        """创建测试页面"""
+        os.makedirs(root_path, exist_ok=True)
+        
+        if deploy_type == "static":
+            # 创建静态HTML测试页面
+            html_content = f"""
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{domain} - 测试页面</title>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background: #f0f2f5;
+        }}
+        .container {{
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        h1 {{
+            color: #1890ff;
+            text-align: center;
+            margin-bottom: 20px;
+        }}
+        .info-box {{
+            background: #f6f6f6;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }}
+        .success {{
+            color: #52c41a;
+            font-weight: bold;
+        }}
+        .time {{
+            color: #666;
+            font-size: 0.9em;
+            text-align: center;
+            margin-top: 20px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>{domain}</h1>
+        <div class="info-box">
+            <p><strong>部署状态：</strong> <span class="success">成功</span></p>
+            <p><strong>站点类型：</strong> 静态网站</p>
+            <p><strong>部署目录：</strong> {root_path}</p>
+            <p><strong>配置文件：</strong> /etc/nginx/sites-available/{domain}.conf</p>
+        </div>
+        <p>这是一个默认的测试页面，表明您的站点已经成功部署。您可以：</p>
+        <ul>
+            <li>替换此页面开始构建您的网站</li>
+            <li>在 {root_path} 目录下添加您的网站文件</li>
+            <li>修改 Nginx 配置以适应您的需求</li>
+        </ul>
+        <p class="time">部署时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+    </div>
+</body>
+</html>
+"""
+            async with aiofiles.open(os.path.join(root_path, "index.html"), "w") as f:
+                await f.write(html_content)
+                
+        else:  # PHP
+            # 创建PHP测试页面
+            php_content = f"""
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{domain} - PHP测试页面</title>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background: #f0f2f5;
+        }}
+        .container {{
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        h1 {{
+            color: #1890ff;
+            text-align: center;
+            margin-bottom: 20px;
+        }}
+        .info-box {{
+            background: #f6f6f6;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }}
+        .success {{
+            color: #52c41a;
+            font-weight: bold;
+        }}
+        .php-info {{
+            margin-top: 20px;
+            padding: 15px;
+            background: #e6f7ff;
+            border-radius: 4px;
+        }}
+        .time {{
+            color: #666;
+            font-size: 0.9em;
+            text-align: center;
+            margin-top: 20px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1><?php echo '{domain}'; ?></h1>
+        <div class="info-box">
+            <p><strong>部署状态：</strong> <span class="success">成功</span></p>
+            <p><strong>站点类型：</strong> PHP网站</p>
+            <p><strong>部署目录：</strong> <?php echo '{root_path}'; ?></p>
+            <p><strong>PHP版本：</strong> <?php echo phpversion(); ?></p>
+        </div>
+        <div class="php-info">
+            <h3>PHP环境信息：</h3>
+            <?php
+                echo '<pre>';
+                echo 'PHP版本: ' . phpversion() . "\\n";
+                echo 'Web服务器: ' . $_SERVER['SERVER_SOFTWARE'] . "\\n";
+                echo 'MySQL支持: ' . (extension_loaded('mysql') ? '是' : '否') . "\\n";
+                echo 'PDO支持: ' . (extension_loaded('pdo') ? '是' : '否') . "\\n";
+                echo 'GD支持: ' . (extension_loaded('gd') ? '是' : '否') . "\\n";
+                echo '</pre>';
+            ?>
+        </div>
+        <p class="time">部署时间：<?php echo date('Y-m-d H:i:s'); ?></p>
+    </div>
+</body>
+</html>
+"""
+            async with aiofiles.open(os.path.join(root_path, "index.php"), "w") as f:
+                await f.write(php_content)
+
     async def deploy_site(self, request: DeployRequest) -> DeployResponse:
         """部署新站点"""
         try:
-            # 创建NginxSite对象而不是字典
+            # 准备路径
+            root_path = f"/var/www/{request.domain}"
+            config_path = f"/etc/nginx/sites-available/{request.domain}.conf"
+            enabled_path = f"/etc/nginx/sites-enabled/{request.domain}.conf"
+            
+            # 创建NginxSite对象
             nginx_site = NginxSite(
                 domain=request.domain,
-                root_path=f"/var/www/{request.domain}",
+                root_path=root_path,
                 php_enabled=request.deploy_type == "php",
                 ssl_enabled=request.enable_ssl
             )
             
             # 创建站点
             await self.nginx_service.create_site(nginx_site)
+            
+            # 创建测试页面
+            await self._create_test_page(request.domain, root_path, request.deploy_type)
+
+            # 准备测试URL
+            test_urls = {
+                "http": f"http://{request.domain}",
+                "https": f"https://{request.domain}" if request.enable_ssl else None
+            }
 
             # 如果需要SSL，配置证书
+            ssl_info = None
             if request.enable_ssl:
                 try:
-                    await self.ssl_service.create_certificate(
+                    ssl_result = await self.ssl_service.create_certificate(
                         domain=request.domain,
                         email=request.ssl_email
                     )
+                    ssl_info = {
+                        "cert_path": f"/etc/letsencrypt/live/{request.domain}/fullchain.pem",
+                        "key_path": f"/etc/letsencrypt/live/{request.domain}/privkey.pem",
+                        "expiry": ssl_result.get("expiry") if ssl_result else None
+                    }
                 except Exception as e:
                     logger.error(f"SSL证书配置失败: {str(e)}")
-                    # 继续部署，但不启用SSL
+
+            # 准备返回信息
+            deployment_info = {
+                "domain": request.domain,
+                "deploy_type": request.deploy_type,
+                "paths": {
+                    "root_directory": root_path,
+                    "nginx_config": config_path,
+                    "nginx_enabled": enabled_path
+                },
+                "urls": test_urls,
+                "ssl": ssl_info
+            }
 
             return DeployResponse(
                 success=True,
-                message=f"站点 {request.domain} 部署成功"
+                message=f"站点 {request.domain} 部署成功",
+                data=deployment_info
             )
 
         except Exception as e:
