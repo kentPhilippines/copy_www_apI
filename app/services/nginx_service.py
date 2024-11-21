@@ -30,10 +30,66 @@ class NginxService:
             logger.error(f"Nginx服务重启失败: {str(e)}")
             raise
 
+    async def _get_system_nginx_user(self) -> str:
+        """获取系统Nginx用户"""
+        try:
+            # 首先检查现有的nginx进程
+            ps_result = await run_command("ps aux | grep nginx | grep -v grep | head -n 1 | awk '{print $1}'")
+            if ps_result.strip():
+                return f"{ps_result.strip()}:{ps_result.strip()}"
+
+            # 检查系统类型
+            if os.path.exists('/etc/redhat-release'):
+                # CentOS/RHEL系统通常使用nginx:nginx
+                # 检查用户是否存在
+                try:
+                    await run_command("id nginx")
+                    return "nginx:nginx"
+                except:
+                    # 如果nginx用户不存在，使用nobody
+                    return "nobody:nobody"
+            else:
+                # Debian/Ubuntu系统通常使用www-data
+                try:
+                    await run_command("id www-data")
+                    return "www-data:www-data"
+                except:
+                    # 如果www-data用户不存在，使用nobody
+                    return "nobody:nobody"
+        except:
+            # 默认返回nobody
+            return "nobody:nobody"
+
+    async def _ensure_nginx_user(self) -> str:
+        """确保Nginx用户存在"""
+        try:
+            nginx_user = await self._get_system_nginx_user()
+            user = nginx_user.split(':')[0]
+
+            # 如果用户不是nobody，确保用户存在
+            if user != "nobody":
+                try:
+                    # 检查用户是否存在
+                    await run_command(f"id {user}")
+                except:
+                    # 用户不存在，创建用户
+                    if os.path.exists('/etc/redhat-release'):
+                        await run_command(f"useradd -r -s /sbin/nologin {user}")
+                    else:
+                        await run_command(f"useradd -r -s /usr/sbin/nologin {user}")
+                    logger.info(f"创建Nginx用户: {user}")
+
+            return nginx_user
+        except Exception as e:
+            logger.error(f"确保Nginx用户存在失败: {str(e)}")
+            return "nobody:nobody"
+
     async def _init_nginx_config(self):
         """初始化Nginx配置"""
         try:
-            nginx_user = await get_nginx_user()
+            # 确保Nginx用户存在
+            nginx_user = await self._ensure_nginx_user()
+            logger.info(f"使用Nginx用户: {nginx_user}")
             
             # 创建必要的目录结构
             dirs = [
@@ -98,6 +154,10 @@ http {{
             async with aiofiles.open("/etc/nginx/nginx.conf", 'w') as f:
                 await f.write(main_config)
 
+            # 设置配置文件权限
+            await run_command(f"chown {nginx_user} /etc/nginx/nginx.conf")
+            await run_command("chmod 644 /etc/nginx/nginx.conf")
+
             # 禁用默认站点
             default_site = "/etc/nginx/sites-enabled/default"
             if os.path.exists(default_site):
@@ -114,8 +174,12 @@ server {
     return 444;
 }
 """
-            async with aiofiles.open("/etc/nginx/conf.d/default.conf", 'w') as f:
+            default_conf_path = "/etc/nginx/conf.d/default.conf"
+            async with aiofiles.open(default_conf_path, 'w') as f:
                 await f.write(default_conf)
+
+            await run_command(f"chown {nginx_user} {default_conf_path}")
+            await run_command("chmod 644 {default_conf_path}")
 
             logger.info("Nginx配置初始化完成")
 
