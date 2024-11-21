@@ -1,8 +1,9 @@
 import os
 import aiofiles
 from typing import List, Optional
-from app.schemas.nginx import NginxSite, NginxResponse
+from app.schemas.nginx import NginxSite, NginxStatus, NginxResponse
 from app.utils.shell import run_command
+from app.utils.nginx import generate_nginx_config
 from app.core.logger import setup_logger
 
 logger = setup_logger(__name__)
