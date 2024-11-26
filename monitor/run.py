@@ -1,6 +1,6 @@
 import asyncio
-from server_monitor import ServerMonitor
-from config import WS_CONFIG
+from .server_monitor import ServerMonitor
+from .config import WS_CONFIG
 import logging
 import os
 import sys
