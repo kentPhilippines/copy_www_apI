@@ -1,11 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.v1.endpoints import nginx, ssl, deploy
+from app.api.v1.endpoints import nginx, ssl, deploy, websocket_manager
 from app.core.init_db import initialize_database
 from app.core.config import settings
 from routers import websocket
 from monitor.run import run_monitor
 import threading
+import logging
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -27,14 +28,19 @@ app.include_router(nginx.router, prefix=f"{settings.API_V1_STR}/nginx", tags=["N
 app.include_router(ssl.router, prefix=f"{settings.API_V1_STR}/ssl", tags=["SSL证书管理"])
 app.include_router(deploy.router, prefix=f"{settings.API_V1_STR}/deploy", tags=["站点部署"])
 app.include_router(websocket.router)
+app.include_router(websocket_manager.router, prefix=f"{settings.API_V1_STR}/ws", tags=["WebSocket"])
 
 @app.on_event("startup")
 async def startup_event():
     """启动时执行"""
-    await initialize_database()
-    # 在新线程中启动监控服务
-    monitor_thread = threading.Thread(target=run_monitor, daemon=True)
-    monitor_thread.start()
+    try:
+        await initialize_database()
+        # 在新线程中启动监控服务
+        monitor_thread = threading.Thread(target=run_monitor, daemon=True)
+        monitor_thread.start()
+    except Exception as e:
+        logging.error(f"启动事件异常: {str(e)}")
+        raise
 
 @app.get("/")
 async def root():
