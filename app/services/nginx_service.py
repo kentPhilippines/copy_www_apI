@@ -430,6 +430,7 @@ server {
     async def list_sites(self) -> List[Dict[str, Any]]:
         """获取所有网站配置"""
         try:
+            self.logger.info("开始获取所有网站配置...")
             sites = []
             conf_dir = "/etc/nginx/conf.d"
             
@@ -438,13 +439,14 @@ server {
                 self.logger.error(f"配置目录不存在: {conf_dir}")
                 return []
 
-            for file_name in os.listdir(conf_dir):
-                if not file_name.endswith('.conf'):
-                    continue
-                    
+            conf_files = [f for f in os.listdir(conf_dir) if f.endswith('.conf')]
+            self.logger.info(f"找到 {len(conf_files)} 个配置文件")
+
+            for file_name in conf_files:
                 try:
                     domain = file_name[:-5]  # 移除 .conf 后缀
                     conf_path = os.path.join(conf_dir, file_name)
+                    self.logger.info(f"正在处理站点配置: {domain}")
                     
                     # 读取配置文件内容
                     try:
@@ -542,16 +544,22 @@ server {
                         site_info['status'] = 'error'
                         site_info['error'] = str(e)
 
+                    # 在成功解析配置后添加日志
+                    self.logger.info(f"站点 {domain} 配置解析完成: 状态={site_info['status']}, "
+                                   f"SSL启用={site_info['ssl_enabled']}, "
+                                   f"端口={site_info['ports'] + site_info['ssl_ports']}")
+
                     sites.append(site_info)
 
                 except Exception as e:
-                    self.logger.error(f"处理配置文件失败 {file_name}: {str(e)}")
+                    self.logger.error(f"处理配置文件失败 {file_name}: {str(e)}", exc_info=True)
                     continue
 
+            self.logger.info(f"成功解析 {len(sites)} 个站点配置")
             return sites
 
         except Exception as e:
-            self.logger.error(f"获取站点列表失败: {str(e)}")
+            self.logger.error(f"获取站点列表失败: {str(e)}", exc_info=True)
             # 返回测试数据
             return [{
                 'domain': 'test.medical-ch.fun',
