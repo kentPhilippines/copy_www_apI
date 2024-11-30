@@ -2,7 +2,6 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional
 from app.services.nginx_service import NginxService
 from app.schemas.nginx import (
-    NginxConfig, 
     NginxSite,
     NginxStatus,
     NginxResponse
