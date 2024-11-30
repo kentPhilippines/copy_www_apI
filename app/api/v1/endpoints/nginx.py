@@ -13,8 +13,9 @@ nginx_service = NginxService()
 
 @router.get("/status", response_model=NginxStatus)
 async def get_nginx_status():
-    """获取Nginx运行状态"""
-    return await nginx_service.get_status()
+    """获取Nginx状态"""
+    status = await nginx_service.get_status()
+    return NginxStatus(**status)
 
 @router.post("/sites", response_model=NginxResponse)
 async def create_site(site: NginxSite):

@@ -310,7 +310,14 @@ server {
             self.logger.error(f"获取Nginx状态失败: {str(e)}")
             return {
                 'running': False,
-                'error': str(e)
+                'processes': [],
+                'version': 'Unknown',
+                'config_test': f'Error: {str(e)}',
+                'resources': {
+                    'cpu_percent': 0,
+                    'memory_percent': 0,
+                    'connections': 0
+                }
             }
 
     async def reload(self) -> Dict[str, Any]:

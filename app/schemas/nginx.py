@@ -1,42 +1,20 @@
 from pydantic import BaseModel
-from typing import Optional, List
-
-class NginxConfig(BaseModel):
-    """Nginx配置基础模型"""
-    server_name: str
-    root_path: str
-    index: List[str] = ["index.html", "index.htm"]
-    php_enabled: bool = False
-    ssl_enabled: bool = False
-    ssl_certificate: Optional[str] = None
-    ssl_certificate_key: Optional[str] = None
-    ssl_chain: Optional[str] = None
-    ssl_protocols: Optional[List[str]] = ["TLSv1.2", "TLSv1.3"]
-    ssl_ciphers: Optional[str] = "HIGH:!aNULL:!MD5"
-
-class NginxSite(BaseModel):
-    """Nginx站点配置"""
-    domain: str
-    root_path: str
-    php_enabled: bool = False
-    ssl_enabled: bool = False
-    ssl_certificate: Optional[str] = None
-    ssl_certificate_key: Optional[str] = None
-    ssl_chain: Optional[str] = None
-    ssl_protocols: Optional[List[str]] = ["TLSv1.2", "TLSv1.3"]
-    ssl_ciphers: Optional[str] = "HIGH:!aNULL:!MD5"
+from typing import List, Optional, Dict, Any
 
 class NginxStatus(BaseModel):
-    """Nginx状态"""
-    is_running: bool
-    pid: Optional[str]
-    version: Optional[str]
-    worker_count: Optional[int]
-    error_log_path: Optional[str]
-    access_log_path: Optional[str]
+    running: bool
+    processes: List[Dict[str, Any]]
+    version: str
+    config_test: str
+    resources: Dict[str, Any]
+
+class NginxSite(BaseModel):
+    domain: str
+    port: int = 80
+    ssl: bool = False
+    root_path: Optional[str] = None
 
 class NginxResponse(BaseModel):
-    """Nginx操作响应"""
     success: bool
     message: str
-    data: Optional[dict] = None
+    data: Optional[Dict[str, Any]] = None

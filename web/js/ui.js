@@ -25,7 +25,8 @@ class UI {
             <span class="status-badge ${status.running ? 'status-running' : 'status-stopped'}">
                 ${status.running ? '运行中' : '已停止'}
             </span>
-            <span>版本: ${status.version || 'Unknown'}</span>
+            <span>版本: ${status.version}</span>
+            <span>配置: ${status.config_test}</span>
         `;
     }
 
