@@ -89,7 +89,7 @@ class API {
     }
 
     async getSite(domain) {
-        return this.request(`/sites/${domain}`);
+        return this.request(`/sites/sites/${domain}`);
     }
 
     async updateSite(domain, updates) {
