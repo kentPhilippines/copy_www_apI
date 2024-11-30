@@ -72,4 +72,19 @@ class API {
     async reloadConfig() {
         return this.request('/nginx/reload');
     }
+
+    // 站点列表
+    async getSites() {
+        return this.request('/nginx/sites');
+    }
+
+    // SSL证书列表
+    async getSSLList() {
+        return this.request('/ssl/list');
+    }
+
+    // 获取日志
+    async getLogs(type, lines) {
+        return this.request(`/nginx/logs/${type}?lines=${lines}`);
+    }
 }

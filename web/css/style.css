@@ -255,3 +255,138 @@ nav ul li a.active {
     gap: 10px;
     margin: 15px 0;
 }
+
+/* 帮助页面样式 */
+.help-content {
+    padding: 20px 0;
+}
+
+.help-content h3 {
+    margin: 20px 0 10px;
+    color: var(--primary-color);
+}
+
+.help-content ul {
+    list-style: none;
+    padding-left: 20px;
+}
+
+.help-content li {
+    margin-bottom: 15px;
+}
+
+.help-content li strong {
+    display: block;
+    margin-bottom: 5px;
+    color: var(--secondary-color);
+}
+
+.faq-list {
+    margin-top: 20px;
+}
+
+.faq-item {
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.faq-item h4 {
+    color: var(--primary-color);
+    margin-bottom: 10px;
+}
+
+/* 安装和卸载页面样式 */
+.code-block {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 15px;
+    border-radius: 4px;
+    overflow-x: auto;
+    margin: 15px 0;
+}
+
+.note, .warning {
+    padding: 15px;
+    border-radius: 4px;
+    margin: 15px 0;
+}
+
+.note {
+    background: #e8f4fd;
+    border-left: 4px solid var(--secondary-color);
+}
+
+.warning {
+    background: #fff3cd;
+    border-left: 4px solid var(--warning-color);
+}
+
+.install-content ul {
+    list-style: disc;
+    padding-left: 20px;
+    margin: 15px 0;
+}
+
+.install-content li {
+    margin-bottom: 8px;
+}
+
+/* Nginx状态页面样式 */
+.sub-card {
+    margin-top: 20px;
+    background: #f8f9fa;
+    border: 1px solid #eee;
+}
+
+.info-desc {
+    margin-top: 15px;
+    padding: 15px;
+    background: #fff;
+    border-radius: 4px;
+}
+
+.info-desc h3 {
+    color: var(--primary-color);
+    margin-bottom: 10px;
+}
+
+.info-desc ul {
+    list-style: none;
+    padding-left: 20px;
+}
+
+.info-desc li {
+    margin-bottom: 8px;
+}
+
+.info-desc code {
+    background: #e9ecef;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: monospace;
+}
+
+.desc-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+.desc-table td {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+}
+
+.desc-table td:first-child {
+    width: 120px;
+    color: var(--secondary-color);
+}
+
+.info-item small {
+    display: block;
+    margin-top: 5px;
+    color: #666;
+    font-size: 12px;
+}

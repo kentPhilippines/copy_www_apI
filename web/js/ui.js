@@ -20,14 +20,29 @@ class UI {
     }
 
     static updateNginxStatus(status) {
-        const statusElement = document.getElementById('nginx-status');
-        statusElement.innerHTML = `
-            <span class="status-badge ${status.running ? 'status-running' : 'status-stopped'}">
-                ${status.running ? '运行中' : '已停止'}
-            </span>
-            <span>版本: ${status.version}</span>
-            <span>配置: ${status.config_test}</span>
-        `;
+        // 更新运行状态
+        const runningBadge = document.getElementById('nginx-running');
+        runningBadge.className = `status-badge ${status.running ? 'status-running' : 'status-stopped'}`;
+        runningBadge.textContent = status.running ? '运行中' : '已停止';
+
+        // 更新版本和配置测试
+        document.getElementById('nginx-version').textContent = status.version;
+        document.getElementById('config-test-status').textContent = status.config_test;
+
+        // 更新进程表
+        const processTableBody = document.getElementById('process-table').getElementsByTagName('tbody')[0];
+        processTableBody.innerHTML = status.processes.map(proc => `
+            <tr>
+                <td>${proc.pid}</td>
+                <td><span class="status-badge ${proc.status === 'sleeping' ? 'status-running' : 'status-stopped'}">${proc.status}</span></td>
+                <td>${proc.pid === status.processes[0].pid ? '主进程' : '工作进程'}</td>
+            </tr>
+        `).join('');
+
+        // 更新资源使用
+        document.getElementById('cpu-usage').textContent = `${status.resources.cpu_percent.toFixed(2)}%`;
+        document.getElementById('memory-usage').textContent = `${status.resources.memory_percent.toFixed(2)}%`;
+        document.getElementById('connection-count').textContent = status.resources.connections;
     }
 
     static createSitesTable(sites = []) {

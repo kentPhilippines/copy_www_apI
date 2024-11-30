@@ -19,6 +19,9 @@
                 <li><a href="#ssl" data-page="ssl">SSL证书</a></li>
                 <li><a href="#config" data-page="config">配置管理</a></li>
                 <li><a href="#logs" data-page="logs">日志查看</a></li>
+                <li><a href="#help" data-page="help">帮助</a></li>
+                <li><a href="#install" data-page="install">安装</a></li>
+                <li><a href="#uninstall" data-page="uninstall">卸载</a></li>
             </ul>
         </nav>
 
@@ -111,6 +114,10 @@
                 <div class="status-info">
                     <div class="info-grid">
                         <div class="info-item">
+                            <label>运行状态:</label>
+                            <span id="nginx-running" class="status-badge">-</span>
+                        </div>
+                        <div class="info-item">
                             <label>版本:</label>
                             <span id="nginx-version">-</span>
                         </div>
@@ -118,25 +125,81 @@
                             <label>配置测试:</label>
                             <span id="config-test-status">-</span>
                         </div>
-                        <div class="info-item">
-                            <label>进程数:</label>
-                            <span id="process-count">-</span>
+                    </div>
+
+                    <div class="card sub-card">
+                        <h3>进程信息</h3>
+                        <table class="table" id="process-table">
+                            <thead>
+                                <tr>
+                                    <th>PID</th>
+                                    <th>状态</th>
+                                    <th>说明</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- 进程列表将通过JS动态更新 -->
+                            </tbody>
+                        </table>
+                        <div class="info-desc">
+                            <p><strong>进程状态说明：</strong></p>
+                            <ul>
+                                <li><code>sleeping</code>: 进程正常运行，等待请求</li>
+                                <li><code>running</code>: 进程正在处理请求</li>
+                                <li><code>stopped</code>: 进程已停止</li>
+                            </ul>
                         </div>
-                        <div class="info-item">
-                            <label>CPU使用率:</label>
-                            <span id="cpu-usage">-</span>
+                    </div>
+
+                    <div class="card sub-card">
+                        <h3>资源使用</h3>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <label>CPU使用率:</label>
+                                <span id="cpu-usage">-</span>
+                                <small>所有Nginx进程的CPU使用率总和</small>
+                            </div>
+                            <div class="info-item">
+                                <label>内存使用率:</label>
+                                <span id="memory-usage">-</span>
+                                <small>所有Nginx进程的内存使用率总和</small>
+                            </div>
+                            <div class="info-item">
+                                <label>当前连接数:</label>
+                                <span id="connection-count">-</span>
+                                <small>当前处理的网络连接总数</small>
+                            </div>
                         </div>
-                        <div class="info-item">
-                            <label>内存使用率:</label>
-                            <span id="memory-usage">-</span>
-                        </div>
-                        <div class="info-item">
-                            <label>连接数:</label>
-                            <span id="connection-count">-</span>
-                        </div>
+                    </div>
+
+                    <div class="info-desc">
+                        <h3>字段说明</h3>
+                        <table class="desc-table">
+                            <tr>
+                                <td><strong>running</strong></td>
+                                <td>Nginx是否正在运行（true/false）</td>
+                            </tr>
+                            <tr>
+                                <td><strong>processes</strong></td>
+                                <td>Nginx进程列表，包含主进程和工作进程</td>
+                            </tr>
+                            <tr>
+                                <td><strong>version</strong></td>
+                                <td>Nginx版本信息</td>
+                            </tr>
+                            <tr>
+                                <td><strong>config_test</strong></td>
+                                <td>配置文件语法检查结果</td>
+                            </tr>
+                            <tr>
+                                <td><strong>resources</strong></td>
+                                <td>系统资源使用情况统计</td>
+                            </tr>
+                        </table>
                     </div>
                 </div>
             </div>
+
             <div class="card">
                 <h2>配置操作</h2>
                 <div class="button-group">
@@ -165,6 +228,114 @@
             </div>
         </div>
 
+        <!-- 帮助页面 -->
+        <div id="help" class="page">
+            <div class="card">
+                <h2>使用帮助</h2>
+                <div class="help-content">
+                    <h3>基本操作</h3>
+                    <ul>
+                        <li>
+                            <strong>站点管理</strong>
+                            <p>添加、删除和管理Nginx站点配置</p>
+                        </li>
+                        <li>
+                            <strong>SSL证书</strong>
+                            <p>申请和管理SSL证书，支持自动续期</p>
+                        </li>
+                        <li>
+                            <strong>配置管理</strong>
+                            <p>查看Nginx状态，测试和重载配置</p>
+                        </li>
+                        <li>
+                            <strong>日志查看</strong>
+                            <p>实时查看访问日志和错误日志</p>
+                        </li>
+                    </ul>
+
+                    <h3>常见问题</h3>
+                    <div class="faq-list">
+                        <div class="faq-item">
+                            <h4>如何添加新站点？</h4>
+                            <p>1. 进入"站点管理"页面</p>
+                            <p>2. 填写域名和端口信息</p>
+                            <p>3. 选择是否启用SSL</p>
+                            <p>4. 点击"添加站点"按钮</p>
+                        </div>
+                        <div class="faq-item">
+                            <h4>如何申请SSL证书？</h4>
+                            <p>1. 进入"SSL证书"页面</p>
+                            <p>2. 输入需要申请证书的域名</p>
+                            <p>3. 点击"申请证书"按钮</p>
+                            <p>4. 等待证书申请完成</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 安装页面 -->
+        <div id="install" class="page">
+            <div class="card">
+                <h2>安装说明</h2>
+                <div class="install-content">
+                    <h3>系统要求</h3>
+                    <ul>
+                        <li>CentOS 7+ / Ubuntu 18.04+</li>
+                        <li>Python 3.6+</li>
+                        <li>Nginx</li>
+                    </ul>
+
+                    <h3>安装步骤</h3>
+                    <pre class="code-block">
+# 1. 下载项目
+git clone https://github.com/your-repo/nginx-manager.git
+cd nginx-manager
+
+# 2. 运行安装脚本
+chmod +x scripts/install.sh
+./scripts/install.sh
+
+# 3. 启动服务
+source venv/bin/activate
+./scripts/start.sh
+                    </pre>
+
+                    <div class="note">
+                        <strong>注意：</strong>安装过程需要root权限
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 卸载页面 -->
+        <div id="uninstall" class="page">
+            <div class="card">
+                <h2>卸载说明</h2>
+                <div class="uninstall-content">
+                    <div class="warning">
+                        <strong>警告：</strong>卸载将删除所有配置和数据，请谨慎操作！
+                    </div>
+
+                    <h3>卸载步骤</h3>
+                    <pre class="code-block">
+# 1. 停止服务
+systemctl stop nginx
+
+# 2. 运行卸载脚本
+./scripts/uninstall.sh
+
+# 3. 删除���目文件
+rm -rf /path/to/nginx-manager
+                    </pre>
+
+                    <div class="note">
+                        <strong>提示：</strong>卸载前请确保已备份重要数据
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- 全局提示框 -->
         <div id="toast" class="toast"></div>
     </div>
@@ -172,5 +343,19 @@
     <script src="js/api.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/main.js"></script>
+    <script>
+        // 全局函数，用于删除站点
+        async function handleDeleteSite(domain) {
+            if (confirm(`确定要删除站点 ${domain} 吗？`)) {
+                try {
+                    const response = await api.deleteSite(domain);
+                    showToast(response.message, 'success');
+                    await updateSitesList();
+                } catch (error) {
+                    showToast(error.message, 'error');
+                }
+            }
+        }
+    </script>
 </body>
 </html>

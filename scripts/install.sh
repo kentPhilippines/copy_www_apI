@@ -248,3 +248,9 @@ else
     error "安装过程中出现错误，请检查日志"
     exit 1
 fi 
+
+
+#  直接执行
+#   source venv/bin/activate && ./scripts/install.sh
+
+#   ./scripts/install.sh

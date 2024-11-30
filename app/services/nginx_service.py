@@ -8,6 +8,7 @@ from app.core.logger import setup_logger
 import subprocess
 import psutil
 import logging
+import re
 
 logger = setup_logger(__name__)
 
@@ -349,3 +350,41 @@ server {
                 'success': False,
                 'error': e.output.decode()
             }
+
+    async def list_sites(self) -> List[NginxSite]:
+        """获取所有网站配置"""
+        try:
+            sites = []
+            # 获取配置目录下的所有配置文件
+            conf_dir = "/etc/nginx/conf.d"
+            for file_name in os.listdir(conf_dir):
+                if file_name.endswith('.conf'):
+                    domain = file_name[:-5]  # 移除 .conf 后缀
+                    
+                    # 读取配置文件内容
+                    conf_path = os.path.join(conf_dir, file_name)
+                    async with aiofiles.open(conf_path, 'r') as f:
+                        content = await f.read()
+                    
+                    # 解析配置文件
+                    ssl_enabled = 'ssl' in content and 'ssl_certificate' in content
+                    port = 80
+                    if 'listen' in content:
+                        # 尝试从配置中提取端口
+                        port_match = re.search(r'listen\s+(\d+)', content)
+                        if port_match:
+                            port = int(port_match.group(1))
+                    
+                    # 创建站点对象
+                    site = NginxSite(
+                        domain=domain,
+                        port=port,
+                        ssl=ssl_enabled,
+                        root_path=f"/var/www/{domain}"
+                    )
+                    sites.append(site)
+            
+            return sites
+        except Exception as e:
+            self.logger.error(f"获取站点列表失败: {str(e)}")
+            raise
