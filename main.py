@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.v1.endpoints import nginx, ssl, deploy 
+from app.api.v1.endpoints import nginx, ssl, deploy ,sites
 from app.core.init_db import initialize_database
 from app.core.config import settings
 
@@ -23,6 +23,7 @@ app.add_middleware(
 app.include_router(nginx.router, prefix=f"{settings.API_V1_STR}/nginx", tags=["Nginx管理"])
 app.include_router(ssl.router, prefix=f"{settings.API_V1_STR}/ssl", tags=["SSL证书管理"])
 app.include_router(deploy.router, prefix=f"{settings.API_V1_STR}/deploy", tags=["站点部署"])
+app.include_router(sites.router, prefix=f"{settings.API_V1_STR}/sites", tags=["站点管理"])
 
 @app.on_event("startup")
 async def startup_event():

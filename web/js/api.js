@@ -87,4 +87,21 @@ class API {
     async getLogs(type, lines) {
         return this.request(`/nginx/logs/${type}?lines=${lines}`);
     }
+
+    async getSite(domain) {
+        return this.request(`/sites/${domain}`);
+    }
+
+    async updateSite(domain, updates) {
+        return this.request(`/sites/${domain}`, {
+            method: 'PUT',
+            body: JSON.stringify(updates)
+        });
+    }
+
+    async backupSite(domain) {
+        return this.request(`/sites/${domain}/backup`, {
+            method: 'POST'
+        });
+    }
 }

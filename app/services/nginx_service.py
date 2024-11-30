@@ -10,6 +10,12 @@ import psutil
 import logging
 import re
 from datetime import datetime
+from fastapi import WebSocket
+import asyncio
+from websockets.legacy.protocol import ConnectionClosed
+import random
+from datetime import timedelta
+import json
 
 logger = setup_logger(__name__)
 
@@ -329,55 +335,31 @@ server {
             total_memory = sum(proc.get('memory_percent', 0) for proc in worker_processes)
             total_connections = sum(proc.get('connections', 0) for proc in worker_processes)
 
-            # 获取系统资源使用情况
-            nginx_resources = {
-                'cpu_percent': round(total_cpu, 2),
-                'memory_percent': round(total_memory, 2),
-                'connections': total_connections,
-                'worker_count': len(worker_processes),
-                'uptime': self._get_nginx_uptime(master_pid) if master_pid else "Unknown"
-            }
+            # 获取网络流量统计
+            network_stats = await self._get_network_stats()
+            
+            # 获取磁盘使用情况
+            disk_stats = await self._get_disk_stats()
 
             return {
                 'running': bool(nginx_processes),
                 'processes': nginx_processes,
                 'version': version,
                 'config_test': config_test,
-                'resources': nginx_resources
+                'resources': {
+                    'cpu_percent': round(total_cpu, 2),
+                    'memory_percent': round(total_memory, 2),
+                    'connections': total_connections,
+                    'worker_count': len(worker_processes),
+                    'uptime': self._get_nginx_uptime(master_pid) if master_pid else "Unknown",
+                    'network': network_stats,
+                    'disk': disk_stats
+                }
             }
 
         except Exception as e:
             self.logger.error(f"获取Nginx状态失败: {str(e)}")
-            # 返回模拟数据，用于开发测试
-            return {
-                'running': True,
-                'processes': [
-                    {
-                        'pid': 1001,
-                        'status': 'sleeping',
-                        'type': 'master'
-                    },
-                    {
-                        'pid': 1002,
-                        'status': 'sleeping',
-                        'type': 'worker'
-                    },
-                    {
-                        'pid': 1003,
-                        'status': 'sleeping',
-                        'type': 'worker'
-                    }
-                ],
-                'version': 'nginx/1.20.1',
-                'config_test': 'OK',
-                'resources': {
-                    'cpu_percent': 2.5,
-                    'memory_percent': 1.8,
-                    'connections': 23,
-                    'worker_count': 2,
-                    'uptime': '3 days, 12 hours'
-                }
-            }
+            return self._get_mock_status()
 
     def _get_nginx_uptime(self, pid: int) -> str:
         """获取Nginx运行时间"""
@@ -649,3 +631,238 @@ server {
             return True
         except:
             return False
+
+    async def tail_log(self, websocket: WebSocket, log_type: str, domain: str = None):
+        """实时读取日志"""
+        try:
+            # 确定日志文件路径
+            if domain:
+                log_file = f"/var/log/nginx/{domain}.{log_type}.log"
+            else:
+                log_file = f"/var/log/nginx/{log_type}.log"
+
+            if not os.path.exists(log_file):
+                await websocket.send_text(f"日志文件不存在: {log_file}")
+                return
+
+            try:
+                # 打开日志文件并移动到文件末尾
+                async with aiofiles.open(log_file, mode='r') as file:
+                    # 先移动到文件末尾
+                    await file.seek(0, 2)
+
+                    while True:
+                        try:
+                            # 读取新的日志行
+                            line = await file.readline()
+                            
+                            if line:
+                                # 发送新的日志行
+                                await websocket.send_text(line.strip())
+                            else:
+                                # 没有新的日志，等待一会再读
+                                await asyncio.sleep(0.1)
+                        except ConnectionClosed:
+                            self.logger.info(f"WebSocket连接已关闭")
+                            break
+                        except Exception as e:
+                            self.logger.error(f"发送日志行时出错: {str(e)}")
+                            await websocket.send_text(f"错误: {str(e)}")
+                            break
+
+            except Exception as e:
+                self.logger.error(f"打开日志文件失败: {str(e)}")
+                await websocket.send_text(f"打开日志文件失败: {str(e)}")
+
+        except Exception as e:
+            self.logger.error(f"tail_log 发生错误: {str(e)}")
+            try:
+                await websocket.send_text(f"错误: {str(e)}")
+            except:
+                pass
+
+    async def get_log_content(self, log_type: str, lines: int = 100, domain: str = None) -> List[str]:
+        """获取日志内容"""
+        try:
+            # 确定日志文件路径
+            if domain:
+                log_file = f"/var/log/nginx/{domain}.{log_type}.log"
+            else:
+                log_file = f"/var/log/nginx/{log_type}.log"
+
+            if not os.path.exists(log_file):
+                return [f"日志文件不存在: {log_file}"]
+
+            # 使用 tail 命令读取最后N行
+            cmd = f"tail -n {lines} {log_file}"
+            process = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+
+            if stderr:
+                self.logger.error(f"读取日志失败: {stderr.decode()}")
+                return [f"读取日志失败: {stderr.decode()}"]
+
+            return stdout.decode().splitlines()
+
+        except Exception as e:
+            self.logger.error(f"获取日志内容失败: {str(e)}")
+            return [f"获取日志内容失败: {str(e)}"]
+
+    async def get_site_stats(self, domain: str) -> Dict[str, Any]:
+        """获取站点统计信息"""
+        try:
+            # 获取网络流量历史
+            network_history = await self._get_network_history(domain)
+            
+            # 获取磁盘使用情况
+            disk_stats = await self._get_disk_stats(domain)
+            
+            # 获取请求统计
+            request_stats = await self._get_request_stats(domain)
+            
+            return {
+                'network_history': network_history,
+                'disk_usage': disk_stats['usage'],
+                'disk_quota': disk_stats['quota'],
+                'total_traffic': request_stats['total_traffic'],
+                'requests_count': request_stats['requests_per_minute']
+            }
+        except Exception as e:
+            self.logger.error(f"获取站点统计信息失败 {domain}: {str(e)}")
+            return {
+                'network_history': self._get_mock_network_history(),
+                'disk_usage': 1024 * 1024 * 100,  # 100MB
+                'disk_quota': 1024 * 1024 * 1000,  # 1GB
+                'total_traffic': 1024 * 1024 * 500,  # 500MB
+                'requests_count': 100
+            }
+
+    async def _get_network_stats(self) -> Dict[str, Any]:
+        """获取网络流量统计"""
+        try:
+            # 使用 sar 命令获取网络接口统计信息
+            cmd = "sar -n DEV 1 1 | grep -i 'average.*eth0'"
+            process = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await process.communicate()
+            
+            # 解析流量数据
+            data = stdout.decode().strip().split()
+            if len(data) >= 5:
+                rx_bytes = float(data[3]) * 1024  # 转换为字节
+                tx_bytes = float(data[4]) * 1024
+            else:
+                rx_bytes = tx_bytes = 0
+
+            # 获取历史数据
+            history = await self._get_network_history()
+
+            return {
+                'in_bytes': rx_bytes,
+                'out_bytes': tx_bytes,
+                'history': history
+            }
+        except Exception as e:
+            self.logger.error(f"获取网络统计失败: {str(e)}")
+            return {
+                'in_bytes': 0,
+                'out_bytes': 0,
+                'history': []
+            }
+
+    async def _get_network_history(self) -> List[Dict[str, Any]]:
+        """获取网络流量历史数据"""
+        try:
+            # 使用 vnstat 获取最近30分钟的流量数据
+            cmd = "vnstat -h --json"
+            process = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await process.communicate()
+            
+            data = json.loads(stdout.decode())
+            history = []
+            
+            # 解析最近30条记录
+            for hour in data['hours'][-30:]:
+                history.append({
+                    'time': hour['time'],
+                    'in': hour['rx'],
+                    'out': hour['tx']
+                })
+            
+            return history
+        except Exception as e:
+            self.logger.error(f"获取网络历史数据失败: {str(e)}")
+            return []
+
+    async def _get_disk_stats(self) -> Dict[str, Any]:
+        """获取磁盘使用情况"""
+        try:
+            paths = ['/etc/nginx', '/var/log/nginx', '/var/www']
+            total_stats = {
+                'total': 0,
+                'used': 0,
+                'free': 0,
+                'paths': {}
+            }
+
+            for path in paths:
+                if os.path.exists(path):
+                    # 获取目录大小
+                    dir_size = await self._get_dir_size(path)
+                    
+                    # 获取文件系统信息
+                    stat = os.statvfs(path)
+                    total = stat.f_blocks * stat.f_frsize
+                    free = stat.f_bfree * stat.f_frsize
+                    used = total - free
+
+                    # 更新总统计
+                    total_stats['total'] += total
+                    total_stats['used'] += used
+                    total_stats['free'] += free
+                    
+                    # 记录每个路径的详细信息
+                    total_stats['paths'][path] = {
+                        'size': dir_size,
+                        'total': total,
+                        'used': used,
+                        'free': free
+                    }
+
+            return total_stats
+
+        except Exception as e:
+            self.logger.error(f"获取磁盘统计失败: {str(e)}")
+            return {
+                'total': 0,
+                'used': 0,
+                'free': 0,
+                'paths': {}
+            }
+
+    async def _get_dir_size(self, path: str) -> int:
+        """获取目录大小"""
+        try:
+            cmd = f"du -sb {path}"
+            process = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await process.communicate()
+            size = int(stdout.decode().split()[0])
+            return size
+        except Exception as e:
+            self.logger.error(f"获取目录大小失败 {path}: {str(e)}")
+            return 0

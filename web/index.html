@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nginx管理系统</title>
     <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div class="container">
@@ -60,10 +61,7 @@
                     <table class="table">
                         <thead>
                             <tr>
-                                <th>域名</th>
-                                <th>配置文件</th>
-                                <th>根目录</th>
-                                <th>SSL</th>
+                                <th>站点</th>
                                 <th>访问地址</th>
                                 <th>操作</th>
                             </tr>
@@ -87,7 +85,7 @@
                     </div>
                     <div class="form-group">
                         <button type="submit" class="btn btn-primary">申请证书</button>
-                        <button type="button" class="btn btn-warning" onclick="handleSSLRenew(event)">续期证书</button>
+                        <button type="button" class="btn btn-warning" onclick="handleSSLRenew(event)">续期��书</button>
                     </div>
                 </form>
             </div>
@@ -149,7 +147,7 @@
                             <p><strong>进程状态说明：</strong></p>
                             <ul>
                                 <li><code>sleeping</code>: 进程正常运行，等待请求</li>
-                                <li><code>running</code>: 进程正在处理请求</li>
+                                <li><code>running</code>: 进程��在处理请求</li>
                                 <li><code>stopped</code>: 进程已停止</li>
                             </ul>
                         </div>
@@ -157,6 +155,16 @@
 
                     <div class="card sub-card">
                         <h3>资源使用</h3>
+                        <div class="resource-charts">
+                            <div class="chart-container">
+                                <h5>网络流量</h5>
+                                <canvas id="networkUsageChart"></canvas>
+                            </div>
+                            <div class="chart-container">
+                                <h5>磁盘使用</h5>
+                                <canvas id="diskUsageChart"></canvas>
+                            </div>
+                        </div>
                         <div class="info-grid">
                             <div class="info-item">
                                 <label>CPU使用率:</label>
@@ -174,14 +182,14 @@
                                 <small>当前处理的网络连接总数</small>
                             </div>
                             <div class="info-item">
-                                <label>工作进程数:</label>
-                                <span id="worker-count">-</span>
-                                <small>当前运行的工作进程数量</small>
+                                <label>网络流量:</label>
+                                <span id="network-traffic">-</span>
+                                <small>实时网络流量统计</small>
                             </div>
                             <div class="info-item">
-                                <label>运行时间:</label>
-                                <span id="uptime">-</span>
-                                <small>Nginx服务运行的总时间</small>
+                                <label>磁盘使用:</label>
+                                <span id="disk-usage">-</span>
+                                <small>Nginx相关目录的磁盘使用情况</small>
                             </div>
                         </div>
                     </div>

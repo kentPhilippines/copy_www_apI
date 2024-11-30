@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, WebSocket, Query, WebSocketDisconnect
 from typing import List, Optional
 from app.services.nginx_service import NginxService
 from app.schemas.nginx import (
@@ -6,6 +6,7 @@ from app.schemas.nginx import (
     NginxStatus,
     NginxResponse
 )
+from starlette.websockets import ConnectionClosed
 
 router = APIRouter()
 nginx_service = NginxService()
@@ -43,4 +44,48 @@ async def reload_nginx():
     try:
         return await nginx_service.reload()
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e)) 
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.websocket("/logs/ws/{log_type}")
+async def websocket_logs(
+    websocket: WebSocket,
+    log_type: str,
+    domain: Optional[str] = None
+):
+    """实时日志WebSocket接口"""
+    try:
+        await websocket.accept()
+        
+        # 验证日志类型
+        if log_type not in ['access', 'error']:
+            await websocket.send_text("无效的日志类型")
+            await websocket.close()
+            return
+
+        await nginx_service.tail_log(websocket, log_type, domain)
+    except WebSocketDisconnect:
+        logger.info("WebSocket连接断开")
+    except ConnectionClosed:
+        logger.info("WebSocket连接关闭")
+    except Exception as e:
+        logger.error(f"WebSocket错误: {str(e)}")
+        try:
+            await websocket.send_text(f"错误: {str(e)}")
+        except:
+            pass
+    finally:
+        try:
+            await websocket.close()
+        except:
+            pass
+
+@router.get("/logs/{log_type}", response_model=List[str])
+async def get_logs(
+    log_type: str,
+    lines: int = Query(default=100, ge=1, le=10000),
+    domain: Optional[str] = None
+):
+    """获取日志内容"""
+    return await nginx_service.get_log_content(log_type, lines, domain)
+
+

@@ -55,7 +55,10 @@ install_system_deps() {
             make \
             openssl \
             openssl-devel \
-            bind-utils
+            bind-utils \
+            sysstat \
+            vnstat \
+            iftop
 
         # 使用pip安装指定版本的certbot和依赖  
         pip3 install --upgrade pip
@@ -94,7 +97,10 @@ install_system_deps() {
             git \
             lsof \
             libssl-dev \
-            dnsutils
+            dnsutils \
+            sysstat \
+            vnstat \
+            iftop
 
         # 使用pip安装指定版本的certbot和依赖
         pip3 install --upgrade pip
@@ -114,6 +120,10 @@ install_system_deps() {
         error "不支持的操作系统"
         exit 1
     fi
+
+    # 启动并启用监控服务
+    systemctl start vnstat
+    systemctl enable vnstat
 
     # 确保certbot可执行
     chmod +x /usr/local/bin/certbot
