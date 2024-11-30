@@ -31,7 +31,13 @@ function initializeApp() {
     updateSitesList();
 
     // 每60秒更新一次站点列表
-    setInterval(updateSitesList, 60000);
+    setInterval(updateSitesList, 6000);
+
+    // 初始化Nginx状态
+    updateNginxStatus();
+    
+    // 每10秒更新一次Nginx状态
+    setInterval(updateNginxStatus, 3000);
 }
 
 // 切换页面
@@ -71,13 +77,13 @@ async function updateNginxStatus() {
         const status = await api.getNginxStatus();
         updateStatusDisplay(status);
     } catch (error) {
-        showToast(error.message, 'error');
+        showToast('获取Nginx状态失败: ' + error.message, 'error');
     }
 }
 
 // 更新状态显示
 function updateStatusDisplay(status) {
-    // 更新状态徽章
+    // 更新运行状态
     const runningBadge = document.getElementById('nginx-running');
     if (runningBadge) {
         runningBadge.className = `status-badge ${status.running ? 'status-running' : 'status-stopped'}`;
@@ -87,10 +93,7 @@ function updateStatusDisplay(status) {
     // 更新版本和配置信息
     const elements = {
         'nginx-version': status.version,
-        'config-test-status': status.config_test,
-        'cpu-usage': `${status.resources.cpu_percent.toFixed(2)}%`,
-        'memory-usage': `${status.resources.memory_percent.toFixed(2)}%`,
-        'connection-count': status.resources.connections
+        'config-test-status': status.config_test
     };
 
     for (const [id, value] of Object.entries(elements)) {
@@ -106,10 +109,44 @@ function updateStatusDisplay(status) {
         processTableBody.innerHTML = status.processes.map(proc => `
             <tr>
                 <td>${proc.pid}</td>
-                <td><span class="status-badge ${proc.status === 'sleeping' ? 'status-running' : 'status-stopped'}">${proc.status}</span></td>
-                <td>${proc.pid === status.processes[0].pid ? '主进程' : '工作进程'}</td>
+                <td>
+                    <span class="status-badge ${proc.status === 'sleeping' ? 'status-running' : 'status-stopped'}">
+                        ${proc.status}
+                    </span>
+                </td>
+                <td>${proc.type === 'master' ? '主进程' : '工作进程'}</td>
             </tr>
         `).join('');
+    }
+
+    // 更新资源使用情况
+    const resources = status.resources;
+    const resourceElements = {
+        'cpu-usage': `${resources.cpu_percent}%`,
+        'memory-usage': `${resources.memory_percent}%`,
+        'connection-count': resources.connections
+    };
+
+    for (const [id, value] of Object.entries(resourceElements)) {
+        const element = document.getElementById(id);
+        if (element) {
+            element.textContent = value;
+        }
+    }
+
+    // 添加工作进程数量和运行时间（如果有的话）
+    if (resources.worker_count !== undefined) {
+        const workerCount = document.getElementById('worker-count');
+        if (workerCount) {
+            workerCount.textContent = resources.worker_count;
+        }
+    }
+
+    if (resources.uptime) {
+        const uptime = document.getElementById('uptime');
+        if (uptime) {
+            uptime.textContent = resources.uptime;
+        }
     }
 }
 

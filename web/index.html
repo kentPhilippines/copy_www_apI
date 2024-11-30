@@ -169,6 +169,16 @@
                                 <span id="connection-count">-</span>
                                 <small>当前处理的网络连接总数</small>
                             </div>
+                            <div class="info-item">
+                                <label>工作进程数:</label>
+                                <span id="worker-count">-</span>
+                                <small>当前运行的工作进程数量</small>
+                            </div>
+                            <div class="info-item">
+                                <label>运行时间:</label>
+                                <span id="uptime">-</span>
+                                <small>Nginx服务运行的总时间</small>
+                            </div>
                         </div>
                     </div>
 
@@ -325,7 +335,7 @@ systemctl stop nginx
 # 2. 运行卸载脚本
 ./scripts/uninstall.sh
 
-# 3. 删除���目文件
+# 3. 删除目文件
 rm -rf /path/to/nginx-manager
                     </pre>
 
