@@ -1,38 +1,37 @@
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
+from app.schemas.nginx import NginxSiteInfo
 
 class DeployRequest(BaseModel):
-    """部署请求"""
+    """部署请求模型"""
     domain: str
-    deploy_type: str  # 'static' 或 'php'
-    source_path: Optional[str] = None
-    enable_ssl: bool = True
+    enable_ssl: bool = False
     ssl_email: Optional[str] = None
-
-    @property
-    def is_php(self) -> bool:
-        return self.deploy_type == 'php'
-
-    @property
-    def is_static(self) -> bool:
-        return self.deploy_type == 'static'
-
-class DeployStatus(BaseModel):
-    """部署状态"""
-    nginx_configured: bool
-    ssl_configured: bool
-    is_accessible: bool
-    error_message: Optional[str] = None
+    root_path: Optional[str] = None
+    custom_config: Optional[str] = None
 
 class DeployResponse(BaseModel):
-    """部署响应"""
+    """部署响应模型"""
     success: bool
     message: str
     data: Optional[Dict[str, Any]] = None
 
-class SiteInfo(BaseModel):
-    """站点信息"""
-    domain: str
-    deploy_type: str
-    path: str
-    status: DeployStatus
+class SiteUpdateRequest(BaseModel):
+    """站点更新请求模型"""
+    ssl_enabled: Optional[bool] = None
+    root_path: Optional[str] = None
+    custom_config: Optional[str] = None
+
+class SiteBackupInfo(BaseModel):
+    """站点备份信息"""
+    backup_path: str
+    backup_time: str
+    site_info: NginxSiteInfo
+    files_included: List[str]
+    size: int
+
+class SiteListResponse(BaseModel):
+    """站点列表响应"""
+    total: int
+    sites: List[NginxSiteInfo]
+    errors: Optional[List[Dict[str, str]]] = None

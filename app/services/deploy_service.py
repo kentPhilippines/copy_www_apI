@@ -1,12 +1,16 @@
-from typing import List, Dict, Any
-from app.schemas.deploy import DeployRequest, DeployResponse
+from typing import List, Dict, Any, Optional
+from app.schemas.deploy import DeployRequest, DeployResponse, SiteUpdateRequest, SiteBackupInfo, SiteListResponse
 from app.services.nginx_service import NginxService
 from app.services.ssl_service import SSLService
-from app.schemas.nginx import NginxSite
+from app.schemas.nginx import NginxSite, NginxSiteInfo, SSLInfo, LogPaths, AccessUrls, DeployInfo
 from app.core.logger import setup_logger
+from app.core.config import settings
 import os
 import aiofiles
 import datetime
+import shutil
+import subprocess
+import json
 
 logger = setup_logger(__name__)
 
@@ -16,85 +20,88 @@ class DeployService:
     def __init__(self):
         self.nginx_service = NginxService()
         self.ssl_service = SSLService()
+        self.logger = logger
 
-    async def _create_test_page(self, domain: str, root_path: str) -> None:
-        """创建测试页面"""
+    async def get_site_info(self, domain: str) -> Optional[NginxSiteInfo]:
+        """获取单个站点的详细信息"""
         try:
-            html_content = f"""
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{domain} - 测试页面</title>
-    <style>
-        body {{
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            margin: 0;
-            padding: 20px;
-            background: #f0f2f5;
-        }}
-        .container {{
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }}
-        h1 {{
-            color: #1890ff;
-            text-align: center;
-            margin-bottom: 20px;
-        }}
-        .info-box {{
-            background: #f6f6f6;
-            padding: 15px;
-            border-radius: 4px;
-            margin-bottom: 15px;
-        }}
-        .success {{
-            color: #52c41a;
-            font-weight: bold;
-        }}
-        .time {{
-            color: #666;
-            font-size: 0.9em;
-            text-align: center;
-            margin-top: 20px;
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>{domain}</h1>
-        <div class="info-box">
-            <p><strong>部署状态：</strong> <span class="success">成功</span></p>
-            <p><strong>站点类型：</strong> 静态网站</p>
-            <p><strong>部署目录：</strong> {root_path}</p>
-            <p><strong>配置文件：</strong> /etc/nginx/conf.d/{domain}.conf</p>
-        </div>
-        <p>这是一个默认的测试页面，表明您的站点已经成功部署。您可以：</p>
-        <ul>
-            <li>替换此页面开始构建您的网站</li>
-            <li>在 {root_path} 目录下添加您的网站文件</li>
-            <li>修改 Nginx 配置以适应您的需求</li>
-        </ul>
-        <p class="time">部署时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-    </div>
-</body>
-</html>
-"""
-            index_path = os.path.join(root_path, "index.html")
-            async with aiofiles.open(index_path, 'w') as f:
-                await f.write(html_content)
-                
-            logger.info(f"测试页面创建成功: {index_path}")
-            
+            sites = await self.list_sites()
+            for site in sites.sites:
+                if site.domain == domain:
+                    return site
+            return None
         except Exception as e:
-            logger.error(f"创建测试页面失败: {str(e)}")
-            raise
+            self.logger.error(f"获取站点信息失败 {domain}: {str(e)}")
+            return None
+
+    async def update_site(self, domain: str, updates: SiteUpdateRequest) -> DeployResponse:
+        """更新站点配置"""
+        try:
+            site_info = await self.get_site_info(domain)
+            if not site_info:
+                raise ValueError(f"站点不存在: {domain}")
+
+            # 备份原配置
+            backup_path = f"{site_info.config_file}.bak"
+            shutil.copy2(site_info.config_file, backup_path)
+
+            try:
+                # 更新配置
+                if updates.ssl_enabled is not None and updates.ssl_enabled != site_info.ssl_enabled:
+                    if updates.ssl_enabled:
+                        # 启用SSL
+                        ssl_result = await self.ssl_service.create_certificate(domain=domain)
+                        if ssl_result.success:
+                            site_info.ssl_info = SSLInfo(**ssl_result.data)
+                    else:
+                        # 禁用SSL
+                        await self.ssl_service.delete_certificate(domain)
+                        site_info.ssl_info = None
+
+                # 更新其他配置
+                if updates.root_path:
+                    site_info.root_path = updates.root_path
+                
+                # 重新生成配置文件
+                nginx_site = NginxSite(
+                    domain=domain,
+                    root_path=site_info.root_path,
+                    ssl_enabled=site_info.ssl_enabled,
+                    ssl_info=site_info.ssl_info
+                )
+                await self.nginx_service.create_site(nginx_site)
+
+                # 测试配置
+                test_result = await self.nginx_service.test_config()
+                if not test_result.success:
+                    raise ValueError(test_result.message)
+
+                # 重载Nginx
+                reload_result = await self.nginx_service.reload()
+                if not reload_result.success:
+                    raise ValueError(reload_result.message)
+
+                # 删除备份
+                os.remove(backup_path)
+
+                return DeployResponse(
+                    success=True,
+                    message=f"站点 {domain} 更新成功",
+                    data=site_info.dict()
+                )
+
+            except Exception as e:
+                # 发生错误时恢复备份
+                if os.path.exists(backup_path):
+                    shutil.move(backup_path, site_info.config_file)
+                raise
+
+        except Exception as e:
+            self.logger.error(f"更新站点失败 {domain}: {str(e)}")
+            return DeployResponse(
+                success=False,
+                message=str(e)
+            )
 
     async def deploy_site(self, request: DeployRequest) -> DeployResponse:
         """部署新站点"""
@@ -197,70 +204,56 @@ class DeployService:
             logger.error(f"移除站点失败: {str(e)}")
             raise 
 
-    async def list_sites(self) -> List[Dict[str, Any]]:
+    async def list_sites(self) -> SiteListResponse:
         """获取所有已部署的站点信息"""
         try:
-            # 获取Nginx站点配置
             nginx_sites = await self.nginx_service.list_sites()
-            
-            # 为每个站点添加部署相关信息
+            site_infos = []
+            errors = []
+
             for site in nginx_sites:
                 try:
-                    # 添加部署状态信息
-                    site['deploy_info'] = {
-                        'deployed': True,
-                        'deploy_time': self._get_deploy_time(site['config_file']),
-                        'git_info': await self._get_git_info(site['root_path']) if site.get('root_exists') else None,
-                        'web_server': 'nginx',
-                        'server_type': self._detect_server_type(site['root_path']) if site.get('root_exists') else 'unknown'
-                    }
+                    site_info = NginxSiteInfo(
+                        domain=site['domain'],
+                        config_file=site['config_file'],
+                        root_path=site['root_path'],
+                        root_exists=site.get('root_exists', False),
+                        ports=site.get('ports', [80]),
+                        ssl_ports=site.get('ssl_ports', []),
+                        ssl_enabled=site.get('ssl_enabled', False),
+                        status=site.get('status', 'unknown'),
+                        error=site.get('error'),
+                        ssl_info=SSLInfo(**site['ssl_info']) if site.get('ssl_info') else None,
+                        access_urls=AccessUrls(**site['access_urls']) if site.get('access_urls') else None,
+                        logs=LogPaths(**site['logs']) if site.get('logs') else None,
+                        deploy_info=DeployInfo(
+                            deployed=True,
+                            deploy_time=self._get_deploy_time(site['config_file']),
+                            git_info=await self._get_git_info(site['root_path']) if site.get('root_exists') else None,
+                            web_server='nginx',
+                            server_type=self._detect_server_type(site['root_path']) if site.get('root_exists') else 'unknown'
+                        )
+                    )
+                    site_infos.append(site_info)
                 except Exception as e:
-                    self.logger.error(f"获取站点部署信息失败 {site['domain']}: {str(e)}")
-                    site['deploy_info'] = {
-                        'deployed': False,
+                    errors.append({
+                        'domain': site['domain'],
                         'error': str(e)
-                    }
+                    })
 
-            return nginx_sites
+            return SiteListResponse(
+                total=len(site_infos),
+                sites=site_infos,
+                errors=errors if errors else None
+            )
 
         except Exception as e:
-            self.logger.error(f"获取部署站点列表失败: {str(e)}")
-            # 返回测试数据
-            return [{
-                'domain': 'test.medical-ch.fun',
-                'config_file': '/etc/nginx/conf.d/test.medical-ch.fun.conf',
-                'root_path': '/var/www/test.medical-ch.fun',
-                'root_exists': True,
-                'ports': [80],
-                'ssl_ports': [443],
-                'ssl_enabled': True,
-                'status': 'active',
-                'ssl_info': {
-                    'cert_path': '/etc/letsencrypt/live/test.medical-ch.fun/fullchain.pem',
-                    'key_path': '/etc/letsencrypt/live/test.medical-ch.fun/privkey.pem',
-                    'cert_exists': True,
-                    'key_exists': True
-                },
-                'access_urls': {
-                    'http': ['http://test.medical-ch.fun'],
-                    'https': ['https://test.medical-ch.fun']
-                },
-                'logs': {
-                    'access_log': '/var/log/nginx/test.medical-ch.fun.access.log',
-                    'error_log': '/var/log/nginx/test.medical-ch.fun.error.log'
-                },
-                'deploy_info': {
-                    'deployed': True,
-                    'deploy_time': '2024-01-20 10:30:00',
-                    'git_info': {
-                        'branch': 'main',
-                        'commit': 'abc123',
-                        'last_update': '2024-01-20 10:25:00'
-                    },
-                    'web_server': 'nginx',
-                    'server_type': 'static'
-                }
-            }]
+            self.logger.error(f"获取站点列表失败: {str(e)}")
+            return SiteListResponse(
+                total=0,
+                sites=[],
+                errors=[{'domain': 'global', 'error': str(e)}]
+            )
 
     def _get_deploy_time(self, config_file: str) -> str:
         """获取站点部署时间"""
@@ -322,3 +315,55 @@ class DeployService:
                 return 'unknown'
         except:
             return 'unknown'
+
+    async def backup_site(self, domain: str) -> DeployResponse:
+        """备份站点"""
+        try:
+            site_info = await self.get_site_info(domain)
+            if not site_info:
+                raise ValueError(f"站点不存在: {domain}")
+
+            # 创建备份目录
+            backup_time = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            backup_dir = os.path.join(settings.BACKUP_DIR, domain, backup_time)
+            os.makedirs(backup_dir, exist_ok=True)
+
+            files_included = []
+            total_size = 0
+
+            # 备份配置文件
+            config_backup = os.path.join(backup_dir, os.path.basename(site_info.config_file))
+            shutil.copy2(site_info.config_file, config_backup)
+            files_included.append(config_backup)
+            total_size += os.path.getsize(config_backup)
+
+            # 备份网站文件
+            if os.path.exists(site_info.root_path):
+                www_backup = os.path.join(backup_dir, 'www')
+                shutil.copytree(site_info.root_path, www_backup)
+                files_included.append(www_backup)
+                total_size += sum(os.path.getsize(os.path.join(dirpath, filename))
+                                for dirpath, _, filenames in os.walk(www_backup)
+                                for filename in filenames)
+
+            # 创建备份信息
+            backup_info = SiteBackupInfo(
+                backup_path=backup_dir,
+                backup_time=backup_time,
+                site_info=site_info,
+                files_included=files_included,
+                size=total_size
+            )
+
+            return DeployResponse(
+                success=True,
+                message=f"站点 {domain} 备份成功",
+                data=backup_info.dict()
+            )
+
+        except Exception as e:
+            self.logger.error(f"备份站点失败 {domain}: {str(e)}")
+            return DeployResponse(
+                success=False,
+                message=str(e)
+            )
