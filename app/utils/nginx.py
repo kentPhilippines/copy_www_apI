@@ -4,7 +4,7 @@ import os
 from app.core.config import settings
 from app.core.logger import setup_logger
 from app.core.exceptions import NginxError
-from app.schemas.nginx import NginxSite, NginxConfig
+from app.schemas.nginx import NginxSite 
 from app.utils.shell import run_command
  
 
