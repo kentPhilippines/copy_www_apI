@@ -3,35 +3,167 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>镜像程序管理系统</title>
+    <title>Nginx管理系统</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>镜像程序管理系统</h1>
+            <h1>Nginx管理系统</h1>
             <div id="nginx-status" class="status-container"></div>
         </header>
         
         <nav>
             <ul>
-                <li><a href="#" class="active" data-page="sites">站点管理</a></li>
-                <li><a href="#" data-page="ssl">SSL证书</a></li>
-                <li><a href="#" data-page="config">配置管理</a></li>
-                <li><a href="#" data-page="logs">日志查看</a></li>
+                <li><a href="#sites" class="active" data-page="sites">站点管理</a></li>
+                <li><a href="#ssl" data-page="ssl">SSL证书</a></li>
+                <li><a href="#config" data-page="config">配置管理</a></li>
+                <li><a href="#logs" data-page="logs">日志查看</a></li>
             </ul>
         </nav>
-        
+
         <div class="settings-panel">
             <div class="form-group">
                 <label>API地址:</label>
-                <input type="text" id="api-url" value="http://localhost:8000">
+                <input type="text" id="api-url" value="http://localhost:8000/api/v1">
             </div>
         </div>
 
-        <main id="main-content">
-            <!-- 动态内容区域 -->
-        </main>
+        <!-- 站点管理页面 -->
+        <div id="sites" class="page active">
+            <div class="card">
+                <h2>添加新站点</h2>
+                <form id="add-site-form" onsubmit="handleAddSite(event)">
+                    <div class="form-group">
+                        <label>域名</label>
+                        <input type="text" name="domain" required placeholder="example.com">
+                    </div>
+                    <div class="form-group">
+                        <label>端口</label>
+                        <input type="number" name="port" value="80" required>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" name="ssl">
+                            启用SSL
+                        </label>
+                    </div>
+                    <button type="submit" class="btn btn-primary">添加站点</button>
+                </form>
+            </div>
+            <div class="card">
+                <h2>站点列表</h2>
+                <div id="sites-list">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>域名</th>
+                                <th>端口</th>
+                                <th>SSL</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sites-table-body">
+                            <!-- 站点列表将通过JS动态更新 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- SSL证书页面 -->
+        <div id="ssl" class="page">
+            <div class="card">
+                <h2>SSL证书管理</h2>
+                <form id="ssl-form" onsubmit="handleSSLRequest(event)">
+                    <div class="form-group">
+                        <label>域名</label>
+                        <input type="text" name="domain" required placeholder="example.com">
+                    </div>
+                    <div class="form-group">
+                        <button type="submit" class="btn btn-primary">申请证书</button>
+                        <button type="button" class="btn btn-warning" onclick="handleSSLRenew(event)">续期证书</button>
+                    </div>
+                </form>
+            </div>
+            <div class="card">
+                <h2>证书列表</h2>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>域名</th>
+                            <th>到期时间</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ssl-table-body">
+                        <!-- 证书列表将通过JS动态更新 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 配置管理页面 -->
+        <div id="config" class="page">
+            <div class="card">
+                <h2>Nginx状态</h2>
+                <div class="status-info">
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <label>版本:</label>
+                            <span id="nginx-version">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>配置测试:</label>
+                            <span id="config-test-status">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>进程数:</label>
+                            <span id="process-count">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>CPU使用率:</label>
+                            <span id="cpu-usage">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>内存使用率:</label>
+                            <span id="memory-usage">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>连接数:</label>
+                            <span id="connection-count">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <h2>配置操作</h2>
+                <div class="button-group">
+                    <button onclick="handleTestConfig()" class="btn btn-primary">测试配置</button>
+                    <button onclick="handleReloadConfig()" class="btn btn-warning">重载配置</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 日志查看页面 -->
+        <div id="logs" class="page">
+            <div class="card">
+                <h2>Nginx日志</h2>
+                <div class="form-group">
+                    <select id="log-type" onchange="handleLogTypeChange(event)">
+                        <option value="access">访问日志</option>
+                        <option value="error">错误日志</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>显示行数</label>
+                    <input type="number" id="log-lines" value="100" min="1" max="1000">
+                    <button onclick="handleRefreshLogs()" class="btn btn-primary">刷新</button>
+                </div>
+                <pre id="log-content" class="log-content"></pre>
+            </div>
+        </div>
 
         <!-- 全局提示框 -->
         <div id="toast" class="toast"></div>
