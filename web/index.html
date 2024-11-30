@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nginx管理系统</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Nginx管理系统</h1>
+            <div id="nginx-status" class="status-container"></div>
+        </header>
+        
+        <nav>
+            <ul>
+                <li><a href="#" class="active" data-page="sites">站点管理</a></li>
+                <li><a href="#" data-page="ssl">SSL证书</a></li>
+                <li><a href="#" data-page="config">配置管理</a></li>
+                <li><a href="#" data-page="logs">日志查看</a></li>
+            </ul>
+        </nav>
+        
+        <div class="settings-panel">
+            <div class="form-group">
+                <label>API地址:</label>
+                <input type="text" id="api-url" value="http://localhost:8000">
+            </div>
+        </div>
+
+        <main id="main-content">
+            <!-- 动态内容区域 -->
+        </main>
+
+        <!-- 全局提示框 -->
+        <div id="toast" class="toast"></div>
+    </div>
+    
+    <script src="js/api.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

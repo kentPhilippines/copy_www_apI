@@ -1,15 +1,21 @@
 import os
 import aiofiles
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from app.schemas.nginx import NginxSite, NginxStatus, NginxResponse
 from app.utils.shell import run_command
 from app.utils.nginx import generate_nginx_config
 from app.core.logger import setup_logger
+import subprocess
+import psutil
+import logging
 
 logger = setup_logger(__name__)
 
 class NginxService:
     """Nginx服务管理"""
+
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
 
     async def _ensure_nginx_user(self) -> str:
         """确保Nginx用户存在"""
@@ -258,3 +264,81 @@ server {
             except:
                 pass
             raise
+
+    async def get_status(self) -> Dict[str, Any]:
+        """获取Nginx状态信息"""
+        try:
+            # 检查Nginx进程
+            nginx_processes = []
+            for proc in psutil.process_iter(['pid', 'name', 'status']):
+                if 'nginx' in proc.info['name'].lower():
+                    nginx_processes.append({
+                        'pid': proc.info['pid'],
+                        'status': proc.info['status']
+                    })
+
+            # 获取Nginx版本
+            try:
+                version_output = subprocess.check_output(['nginx', '-v'], stderr=subprocess.STDOUT)
+                version = version_output.decode().strip()
+            except:
+                version = "Unknown"
+
+            # 检查配置文件语法
+            try:
+                subprocess.check_output(['nginx', '-t'], stderr=subprocess.STDOUT)
+                config_test = "OK"
+            except subprocess.CalledProcessError as e:
+                config_test = f"Error: {e.output.decode()}"
+
+            # 获取系统资源使用情况
+            nginx_resources = {
+                'cpu_percent': sum(p.cpu_percent() for p in psutil.Process().children()),
+                'memory_percent': sum(p.memory_percent() for p in psutil.Process().children()),
+                'connections': len(psutil.net_connections())
+            }
+
+            return {
+                'running': len(nginx_processes) > 0,
+                'processes': nginx_processes,
+                'version': version,
+                'config_test': config_test,
+                'resources': nginx_resources
+            }
+
+        except Exception as e:
+            self.logger.error(f"获取Nginx状态失败: {str(e)}")
+            return {
+                'running': False,
+                'error': str(e)
+            }
+
+    async def reload(self) -> Dict[str, Any]:
+        """重新加载Nginx配置"""
+        try:
+            subprocess.check_output(['nginx', '-s', 'reload'])
+            return {
+                'success': True,
+                'message': 'Nginx配置已重新加载'
+            }
+        except subprocess.CalledProcessError as e:
+            self.logger.error(f"重新加载Nginx配置失败: {e.output.decode()}")
+            return {
+                'success': False,
+                'error': e.output.decode()
+            }
+
+    async def test_config(self) -> Dict[str, Any]:
+        """测试Nginx配置"""
+        try:
+            output = subprocess.check_output(['nginx', '-t'], stderr=subprocess.STDOUT)
+            return {
+                'success': True,
+                'message': output.decode()
+            }
+        except subprocess.CalledProcessError as e:
+            self.logger.error(f"Nginx配置测试失败: {e.output.decode()}")
+            return {
+                'success': False,
+                'error': e.output.decode()
+            }
