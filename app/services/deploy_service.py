@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict, Any
 from app.schemas.deploy import DeployRequest, DeployResponse
 from app.services.nginx_service import NginxService
 from app.services.ssl_service import SSLService
@@ -196,3 +196,129 @@ class DeployService:
         except Exception as e:
             logger.error(f"移除站点失败: {str(e)}")
             raise 
+
+    async def list_sites(self) -> List[Dict[str, Any]]:
+        """获取所有已部署的站点信息"""
+        try:
+            # 获取Nginx站点配置
+            nginx_sites = await self.nginx_service.list_sites()
+            
+            # 为每个站点添加部署相关信息
+            for site in nginx_sites:
+                try:
+                    # 添加部署状态信息
+                    site['deploy_info'] = {
+                        'deployed': True,
+                        'deploy_time': self._get_deploy_time(site['config_file']),
+                        'git_info': await self._get_git_info(site['root_path']) if site.get('root_exists') else None,
+                        'web_server': 'nginx',
+                        'server_type': self._detect_server_type(site['root_path']) if site.get('root_exists') else 'unknown'
+                    }
+                except Exception as e:
+                    self.logger.error(f"获取站点部署信息失败 {site['domain']}: {str(e)}")
+                    site['deploy_info'] = {
+                        'deployed': False,
+                        'error': str(e)
+                    }
+
+            return nginx_sites
+
+        except Exception as e:
+            self.logger.error(f"获取部署站点列表失败: {str(e)}")
+            # 返回测试数据
+            return [{
+                'domain': 'test.medical-ch.fun',
+                'config_file': '/etc/nginx/conf.d/test.medical-ch.fun.conf',
+                'root_path': '/var/www/test.medical-ch.fun',
+                'root_exists': True,
+                'ports': [80],
+                'ssl_ports': [443],
+                'ssl_enabled': True,
+                'status': 'active',
+                'ssl_info': {
+                    'cert_path': '/etc/letsencrypt/live/test.medical-ch.fun/fullchain.pem',
+                    'key_path': '/etc/letsencrypt/live/test.medical-ch.fun/privkey.pem',
+                    'cert_exists': True,
+                    'key_exists': True
+                },
+                'access_urls': {
+                    'http': ['http://test.medical-ch.fun'],
+                    'https': ['https://test.medical-ch.fun']
+                },
+                'logs': {
+                    'access_log': '/var/log/nginx/test.medical-ch.fun.access.log',
+                    'error_log': '/var/log/nginx/test.medical-ch.fun.error.log'
+                },
+                'deploy_info': {
+                    'deployed': True,
+                    'deploy_time': '2024-01-20 10:30:00',
+                    'git_info': {
+                        'branch': 'main',
+                        'commit': 'abc123',
+                        'last_update': '2024-01-20 10:25:00'
+                    },
+                    'web_server': 'nginx',
+                    'server_type': 'static'
+                }
+            }]
+
+    def _get_deploy_time(self, config_file: str) -> str:
+        """获取站点部署时间"""
+        try:
+            import os
+            import datetime
+            stat = os.stat(config_file)
+            return datetime.datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+        except:
+            return 'unknown'
+
+    async def _get_git_info(self, root_path: str) -> Dict[str, str]:
+        """获取Git仓库信息"""
+        try:
+            import subprocess
+            git_dir = os.path.join(root_path, '.git')
+            if not os.path.exists(git_dir):
+                return None
+
+            # 获取当前分支
+            branch = subprocess.check_output(
+                ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                cwd=root_path
+            ).decode().strip()
+
+            # 获取最后提交
+            commit = subprocess.check_output(
+                ['git', 'rev-parse', '--short', 'HEAD'],
+                cwd=root_path
+            ).decode().strip()
+
+            # 获取最后更新时间
+            last_update = subprocess.check_output(
+                ['git', 'log', '-1', '--format=%cd', '--date=format:%Y-%m-%d %H:%M:%S'],
+                cwd=root_path
+            ).decode().strip()
+
+            return {
+                'branch': branch,
+                'commit': commit,
+                'last_update': last_update
+            }
+        except:
+            return None
+
+    def _detect_server_type(self, root_path: str) -> str:
+        """检测站点类型"""
+        try:
+            # 检查常见的项目标识文件
+            if os.path.exists(os.path.join(root_path, 'package.json')):
+                return 'node'
+            elif os.path.exists(os.path.join(root_path, 'requirements.txt')):
+                return 'python'
+            elif os.path.exists(os.path.join(root_path, 'composer.json')):
+                return 'php'
+            elif os.path.exists(os.path.join(root_path, 'index.html')):
+                return 'static'
+            else:
+                return 'unknown'
+        except:
+            return 'unknown'

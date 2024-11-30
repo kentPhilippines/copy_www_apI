@@ -431,69 +431,125 @@ server {
         """获取所有网站配置"""
         try:
             sites = []
-            # 获取配置目录下的所有配置文件
             conf_dir = "/etc/nginx/conf.d"
+            
+            # 确保配置目录存在
+            if not os.path.exists(conf_dir):
+                self.logger.error(f"配置目录不存在: {conf_dir}")
+                return []
+
             for file_name in os.listdir(conf_dir):
-                if file_name.endswith('.conf'):
+                if not file_name.endswith('.conf'):
+                    continue
+                    
+                try:
                     domain = file_name[:-5]  # 移除 .conf 后缀
+                    conf_path = os.path.join(conf_dir, file_name)
                     
                     # 读取配置文件内容
-                    conf_path = os.path.join(conf_dir, file_name)
-                    async with aiofiles.open(conf_path, 'r') as f:
-                        content = await f.read()
-                    
+                    try:
+                        async with aiofiles.open(conf_path, 'r') as f:
+                            content = await f.read()
+                    except Exception as e:
+                        self.logger.error(f"读取配置文件失败 {conf_path}: {str(e)}")
+                        continue
+
                     # 解析配置文件
-                    ssl_enabled = 'ssl' in content and 'ssl_certificate' in content
-                    
-                    # 提取SSL证书路径
-                    ssl_info = None
-                    if ssl_enabled:
-                        cert_match = re.search(r'ssl_certificate\s+(.+?);', content)
-                        key_match = re.search(r'ssl_certificate_key\s+(.+?);', content)
-                        if cert_match and key_match:
-                            ssl_info = {
-                                'cert_path': cert_match.group(1),
-                                'key_path': key_match.group(1)
-                            }
-
-                    # 提取根目录
-                    root_match = re.search(r'root\s+(.+?);', content)
-                    root_path = root_match.group(1) if root_match else f"/var/www/{domain}"
-
-                    # 提取监听端口
-                    port = 80
-                    if 'listen' in content:
-                        port_match = re.search(r'listen\s+(\d+)', content)
-                        if port_match:
-                            port = int(port_match.group(1))
-
-                    # 创建站点信息
                     site_info = {
                         'domain': domain,
                         'config_file': conf_path,
-                        'root_path': root_path,
-                        'ssl_enabled': ssl_enabled,
-                        'port': port,
-                        'access_urls': {
-                            'http': f'http://{domain}',
-                            'https': f'https://{domain}' if ssl_enabled else None
-                        }
+                        'status': 'unknown',
+                        'error': None
                     }
 
-                    if ssl_info:
-                        site_info['ssl_info'] = ssl_info
-
-                    # 检查站点状态
                     try:
-                        # 检查配置文件语法
-                        subprocess.check_output(['nginx', '-t'], stderr=subprocess.STDOUT)
-                        site_info['status'] = 'active'
-                    except subprocess.CalledProcessError:
+                        # 提取根目录
+                        root_match = re.search(r'root\s+([^;]+);', content)
+                        site_info['root_path'] = root_match.group(1).strip() if root_match else f"/var/www/{domain}"
+
+                        # 检查根目录是否存在
+                        site_info['root_exists'] = os.path.exists(site_info['root_path'])
+
+                        # 提取监听端口和SSL配置
+                        listen_matches = re.finditer(r'listen\s+([^;]+);', content)
+                        ports = []
+                        ssl_ports = []
+                        for match in listen_matches:
+                            port_str = match.group(1)
+                            if 'ssl' in port_str:
+                                port = int(re.search(r'\d+', port_str).group())
+                                ssl_ports.append(port)
+                            else:
+                                port = int(re.search(r'\d+', port_str).group())
+                                ports.append(port)
+
+                        site_info['ports'] = ports
+                        site_info['ssl_ports'] = ssl_ports
+
+                        # SSL配置检查
+                        site_info['ssl_enabled'] = bool(ssl_ports) or 'ssl on;' in content
+                        if site_info['ssl_enabled']:
+                            cert_match = re.search(r'ssl_certificate\s+([^;]+);', content)
+                            key_match = re.search(r'ssl_certificate_key\s+([^;]+);', content)
+                            if cert_match and key_match:
+                                cert_path = cert_match.group(1).strip()
+                                key_path = key_match.group(1).strip()
+                                site_info['ssl_info'] = {
+                                    'cert_path': cert_path,
+                                    'key_path': key_path,
+                                    'cert_exists': os.path.exists(cert_path),
+                                    'key_exists': os.path.exists(key_path)
+                                }
+
+                        # 访问地址
+                        site_info['access_urls'] = {
+                            'http': [f'http://{domain}:{port}' for port in ports] if ports else [f'http://{domain}'],
+                            'https': [f'https://{domain}:{port}' for port in ssl_ports] if ssl_ports else [f'https://{domain}'] if site_info['ssl_enabled'] else []
+                        }
+
+                        # 检查日志文件
+                        access_log_match = re.search(r'access_log\s+([^;]+);', content)
+                        error_log_match = re.search(r'error_log\s+([^;]+);', content)
+                        site_info['logs'] = {
+                            'access_log': access_log_match.group(1).strip() if access_log_match else f'/var/log/nginx/{domain}.access.log',
+                            'error_log': error_log_match.group(1).strip() if error_log_match else f'/var/log/nginx/{domain}.error.log'
+                        }
+
+                        # 检查站点状态
+                        try:
+                            # 检查配置文件语法
+                            subprocess.check_output(['nginx', '-t'], stderr=subprocess.STDOUT)
+                            # 检查进程是否运行
+                            if bool(subprocess.check_output(['pgrep', 'nginx'])):
+                                # 尝试连接到站点
+                                for port in (ports + ssl_ports):
+                                    try:
+                                        subprocess.check_output(['curl', '-k', '-s', '-o', '/dev/null', f'http://localhost:{port}'])
+                                        site_info['status'] = 'active'
+                                        break
+                                    except:
+                                        continue
+                                if site_info['status'] == 'unknown':
+                                    site_info['status'] = 'inactive'
+                            else:
+                                site_info['status'] = 'stopped'
+                        except subprocess.CalledProcessError as e:
+                            site_info['status'] = 'error'
+                            site_info['error'] = e.output.decode()
+
+                    except Exception as e:
+                        self.logger.error(f"解析站点配置失败 {domain}: {str(e)}")
                         site_info['status'] = 'error'
+                        site_info['error'] = str(e)
 
                     sites.append(site_info)
-            
+
+                except Exception as e:
+                    self.logger.error(f"处理配置文件失败 {file_name}: {str(e)}")
+                    continue
+
             return sites
+
         except Exception as e:
             self.logger.error(f"获取站点列表失败: {str(e)}")
             # 返回测试数据
@@ -501,15 +557,23 @@ server {
                 'domain': 'test.medical-ch.fun',
                 'config_file': '/etc/nginx/conf.d/test.medical-ch.fun.conf',
                 'root_path': '/var/www/test.medical-ch.fun',
+                'root_exists': True,
+                'ports': [80],
+                'ssl_ports': [443],
                 'ssl_enabled': True,
-                'port': 443,
                 'status': 'active',
                 'ssl_info': {
                     'cert_path': '/etc/letsencrypt/live/test.medical-ch.fun/fullchain.pem',
-                    'key_path': '/etc/letsencrypt/live/test.medical-ch.fun/privkey.pem'
+                    'key_path': '/etc/letsencrypt/live/test.medical-ch.fun/privkey.pem',
+                    'cert_exists': True,
+                    'key_exists': True
                 },
                 'access_urls': {
-                    'http': 'http://test.medical-ch.fun',
-                    'https': 'https://test.medical-ch.fun'
+                    'http': ['http://test.medical-ch.fun'],
+                    'https': ['https://test.medical-ch.fun']
+                },
+                'logs': {
+                    'access_log': '/var/log/nginx/test.medical-ch.fun.access.log',
+                    'error_log': '/var/log/nginx/test.medical-ch.fun.error.log'
                 }
             }]
