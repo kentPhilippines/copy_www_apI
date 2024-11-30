@@ -1,8 +1,6 @@
 from pydantic import BaseSettings
 from typing import List
 import os
-from dotenv import load_dotenv
-
 # 加载.env文件
 
 class Settings(BaseSettings):
