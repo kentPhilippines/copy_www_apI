@@ -115,6 +115,17 @@ function updateStatusDisplay(status) {
                     </span>
                 </td>
                 <td>${proc.type === 'master' ? '主进程' : '工作进程'}</td>
+                <td>
+                    <span class="process-cwd" title="${proc.cwd}">
+                        ${proc.cwd}
+                    </span>
+                </td>
+                <td>
+                    ${proc.type === 'master' ? 
+                        `<small class="process-cmd">${proc.cmdline}</small>` : 
+                        `<small>CPU: ${proc.cpu_percent.toFixed(1)}% | 内存: ${proc.memory_percent.toFixed(1)}%</small>`
+                    }
+                </td>
             </tr>
         `).join('');
     }
@@ -161,7 +172,7 @@ function showToast(message, type = 'success') {
     }, 3000);
 }
 
-// 添加站点列表更新函数
+// 更新站点列表函数
 async function updateSitesList() {
     try {
         const sites = await api.getSites();
@@ -169,15 +180,51 @@ async function updateSitesList() {
         if (tableBody) {
             tableBody.innerHTML = sites.map(site => `
                 <tr>
-                    <td>${site.domain}</td>
-                    <td>${site.port}</td>
                     <td>
-                        <span class="status-badge ${site.ssl ? 'status-running' : 'status-stopped'}">
-                            ${site.ssl ? '启用' : '禁用'}
+                        <strong>${site.domain}</strong>
+                    </td>
+                    <td>
+                        <span class="file-path" title="${site.config_file}">
+                            ${site.config_file}
                         </span>
                     </td>
                     <td>
-                        <button class="btn btn-danger" onclick="handleDeleteSite('${site.domain}')">删除</button>
+                        <span class="file-path" title="${site.root_path}">
+                            ${site.root_path}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="status-badge ${site.ssl_enabled ? 'status-running' : 'status-stopped'}">
+                            ${site.ssl_enabled ? '启用' : '禁用'}
+                        </span>
+                        ${site.ssl_enabled ? `
+                            <div class="ssl-info">
+                                <small title="${site.ssl_info.cert_path}">证书: ${site.ssl_info.cert_path}</small>
+                                <small title="${site.ssl_info.key_path}">密钥: ${site.ssl_info.key_path}</small>
+                            </div>
+                        ` : ''}
+                    </td>
+                    <td>
+                        <div class="access-urls">
+                            <a href="${site.access_urls.http}" target="_blank" class="url-link">
+                                <span class="protocol">HTTP</span>
+                            </a>
+                            ${site.ssl_enabled ? `
+                                <a href="${site.access_urls.https}" target="_blank" class="url-link">
+                                    <span class="protocol secure">HTTPS</span>
+                                </a>
+                            ` : ''}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="button-group">
+                            <button class="btn btn-warning" onclick="handleEditSite('${site.domain}')">
+                                编辑
+                            </button>
+                            <button class="btn btn-danger" onclick="handleDeleteSite('${site.domain}')">
+                                删除
+                            </button>
+                        </div>
                     </td>
                 </tr>
             `).join('');
