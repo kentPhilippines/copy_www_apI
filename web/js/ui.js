@@ -74,3 +74,55 @@ class UI {
         `;
     }
 }
+
+function showDialog(title, content, options = {}) {
+    return new Promise((resolve) => {
+        const dialog = document.createElement('div');
+        dialog.className = 'dialog-overlay';
+        
+        const width = options.width || 'auto';
+        const buttons = options.buttons || ['确定', '取消'];
+
+        dialog.innerHTML = `
+            <div class="dialog" style="width: ${width}">
+                <div class="dialog-header">
+                    <h3>${title}</h3>
+                    <button class="close-btn">&times;</button>
+                </div>
+                <div class="dialog-content"></div>
+                ${buttons.length > 0 ? `
+                    <div class="dialog-footer">
+                        ${buttons.map(btn => `
+                            <button class="btn ${btn === '取消' ? 'btn-secondary' : 'btn-primary'}">${btn}</button>
+                        `).join('')}
+                    </div>
+                ` : ''}
+            </div>
+        `;
+
+        // 添加内容
+        dialog.querySelector('.dialog-content').appendChild(
+            content instanceof Element ? content : document.createTextNode(content)
+        );
+
+        // 添加事件处理
+        dialog.querySelector('.close-btn').onclick = () => {
+            dialog.remove();
+            resolve(false);
+        };
+
+        // 按钮事件
+        const footer = dialog.querySelector('.dialog-footer');
+        if (footer) {
+            footer.querySelectorAll('.btn').forEach(btn => {
+                btn.onclick = () => {
+                    dialog.remove();
+                    resolve(btn.textContent);
+                };
+            });
+        }
+
+        document.body.appendChild(dialog);
+        return dialog;
+    });
+}

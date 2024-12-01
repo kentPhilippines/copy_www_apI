@@ -37,9 +37,14 @@ class API {
 
     // 站点管理
     async createSite(siteData) {
-        return this.request('/nginx/sites', {
+        return this.request('/deploy/sites', {
             method: 'POST',
-            body: JSON.stringify(siteData)
+            body: JSON.stringify({
+                domain: siteData.domain,
+                deploy_type: siteData.deploy_type,
+                enable_ssl: siteData.enable_ssl,
+                ssl_email: siteData.ssl_email
+            })
         });
     }
 
@@ -89,7 +94,31 @@ class API {
     }
 
     async getSite(domain) {
-        return this.request(`/sites/sites/${domain}`);
+        try {
+            const response = await this.request(`/sites/sites/${domain}`);
+            return {
+                domain: response.domain,
+                status: response.status || 'unknown',
+                config_file: response.config_file,
+                root_path: response.root_path,
+                root_exists: response.root_exists,
+                ports: response.ports || [],
+                ssl_ports: response.ssl_ports || [],
+                ssl_enabled: response.ssl_enabled,
+                ssl_info: response.ssl_info,
+                logs: response.logs || {
+                    access_log: '/var/log/nginx/access.log',
+                    error_log: '/var/log/nginx/error.log'
+                },
+                access_urls: response.access_urls || {
+                    http: [],
+                    https: []
+                }
+            };
+        } catch (error) {
+            console.error('获取站点详情失败:', error);
+            throw new Error('获取站点详情失败');
+        }
     }
 
     async updateSite(domain, updates) {

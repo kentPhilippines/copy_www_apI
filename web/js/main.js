@@ -62,6 +62,16 @@ function initForms() {
     const addSiteForm = document.getElementById('add-site-form');
     if (addSiteForm) {
         addSiteForm.addEventListener('submit', handleAddSite);
+
+        // 添加SSL邮箱显示/隐藏逻辑
+        const sslCheckbox = addSiteForm.querySelector('input[name="enable_ssl"]');
+        const sslEmailGroup = addSiteForm.querySelector('.ssl-email');
+        
+        sslCheckbox.addEventListener('change', () => {
+            sslEmailGroup.style.display = sslCheckbox.checked ? 'block' : 'none';
+            const emailInput = sslEmailGroup.querySelector('input');
+            emailInput.required = sslCheckbox.checked;
+        });
     }
 
     // SSL证书表单
@@ -217,11 +227,8 @@ async function updateSitesList() {
                     </td>
                     <td>
                         <div class="button-group">
-                            <button class="btn btn-sm btn-info" onclick="handleViewSiteDetails('${site.domain}')">
-                                <i class="fas fa-info-circle">详情</i>
-                            </button>
-                            <button class="btn btn-sm btn-danger" onclick="handleDeleteSite('${site.domain}')">
-                                <i class="fas fa-trash">删除</i>
+                            <button class="btn btn-sm btn-info" onclick="siteDetails.show('${site.domain}')">
+                                <i class="fas fa-info-circle"></i> 详情
                             </button>
                         </div>
                     </td>
@@ -237,11 +244,20 @@ async function updateSitesList() {
 async function handleAddSite(event) {
     event.preventDefault();
     const form = event.target;
+    
+    // 获取表单数据
     const data = {
         domain: form.domain.value,
-        port: parseInt(form.port.value),
-        ssl: form.ssl.checked
+        deploy_type: form.deploy_type.value,
+        enable_ssl: form.enable_ssl.checked,
+        ssl_email: form.ssl_email.value
     };
+
+    // 验证SSL邮箱
+    if (data.enable_ssl && !data.ssl_email) {
+        showToast('启用SSL时必须提供邮箱地址', 'error');
+        return;
+    }
 
     try {
         const submitButton = form.querySelector('button[type="submit"]');
@@ -249,7 +265,7 @@ async function handleAddSite(event) {
         submitButton.innerHTML = '<span class="loading"></span> 添加中...';
 
         const response = await api.createSite(data);
-        showToast(response.message, 'success');
+        showToast(response.message || '站点添加成功', 'success');
         form.reset();
         await updateSitesList();  // 更新站点列表
     } catch (error) {
@@ -674,7 +690,7 @@ function toggleAutoScroll() {
 
  
 
-// 全局变量保存图表实例和数据
+// 全局变量保存表实例和数据
 let networkChart = null;
 let diskChart = null;
 let networkData = {
@@ -791,118 +807,7 @@ function formatBytes(bytes) {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
-
-// 查看站点详情
-async function handleViewSiteDetails(domain) {
-    try {
-        const site = await api.getSite(domain);
-        if (!site) {
-            showToast('站点不存在', 'error');
-            return;
-        }
-
-        const content = document.createElement('div');
-        content.className = 'site-details';
-        content.innerHTML = `
-            <div class="detail-section">
-                <h4>基本信息</h4>
-                <div class="detail-grid">
-                    <div class="detail-item">
-                        <label>配置文件:</label>
-                        <span class="file-path" title="${site.config_file}">${site.config_file}</span>
-                    </div>
-                    <div class="detail-item">
-                        <label>根目录:</label>
-                        <span class="file-path ${site.root_exists ? '' : 'not-exists'}" 
-                              title="${site.root_path}">${site.root_path}</span>
-                    </div>
-                    <div class="detail-item">
-                        <label>端口:</label>
-                        <span>HTTP: ${site.ports.join(', ')} | HTTPS: ${site.ssl_ports.join(', ') || '无'}</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="detail-section">
-                <h4>SSL证书</h4>
-                ${site.ssl_enabled && site.ssl_info ? `
-                    <div class="detail-grid">
-                        <div class="detail-item">
-                            <label>证书文件:</label>
-                            <span class="file-path ${site.ssl_info.cert_exists ? '' : 'not-exists'}" 
-                                  title="${site.ssl_info.cert_path}">${site.ssl_info.cert_path}</span>
-                        </div>
-                        <div class="detail-item">
-                            <label>密钥文件:</label>
-                            <span class="file-path ${site.ssl_info.key_exists ? '' : 'not-exists'}" 
-                                  title="${site.ssl_info.key_path}">${site.ssl_info.key_path}</span>
-                        </div>
-                    </div>
-                ` : '<p>未启用SSL</p>'}
-            </div>
-
-            <div class="detail-section">
-                <h4>日志文件</h4>
-                <div class="detail-grid">
-                    <div class="detail-item">
-                        <label>访问日志:</label>
-                        <span class="file-path" title="${site.logs.access_log}">${site.logs.access_log}</span>
-                        <button class="btn btn-sm btn-info" onclick="viewLog('${domain}', 'access')">
-                            查看日志
-                        </button>
-                    </div>
-                    <div class="detail-item">
-                        <label>错误日志:</label>
-                        <span class="file-path" title="${site.logs.error_log}">${site.logs.error_log}</span>
-                        <button class="btn btn-sm btn-info" onclick="viewLog('${domain}', 'error')">
-                            查看日志
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="detail-section">
-                <h4>资源使用情况</h4>
-                <div class="resource-charts">
-                    <div class="chart-container">
-                        <h5>网络流量</h5>
-                        <canvas id="networkChart"></canvas>
-                    </div>
-                    <div class="chart-container">
-                        <h5>磁盘使用</h5>
-                        <canvas id="diskChart"></canvas>
-                    </div>
-                </div>
-                <div class="resource-stats">
-                    <div class="stat-item">
-                        <label>总流量:</label>
-                        <span>${formatBytes(site.stats?.total_traffic || 0)}</span>
-                    </div>
-                    <div class="stat-item">
-                        <label>请求数:</label>
-                        <span>${site.stats?.requests_count || 0}/分钟</span>
-                    </div>
-                    <div class="stat-item">
-                        <label>磁盘使用:</label>
-                        <span>${formatBytes(site.stats?.disk_usage || 0)} / ${formatBytes(site.stats?.disk_quota || 0)}</span>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        await showDialog(`站点详情 - ${domain}`, content);
-
-        // 初始化图表
-        if (site.stats) {
-            initNetworkChart(site.stats.network_history);
-            initDiskChart(site.stats.disk_usage, site.stats.disk_quota);
-        }
-
-    } catch (error) {
-        showToast(error.message, 'error');
-    }
-}
-
+ 
 // 查看日志
 async function viewLog(domain, type) {
     try {

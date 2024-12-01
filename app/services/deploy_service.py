@@ -367,3 +367,176 @@ class DeployService:
                 success=False,
                 message=str(e)
             )
+
+    async def _create_test_page(self, domain: str, root_path: str):
+        """创建测试页面"""
+        # 创建站点目录
+        site_root = f"/var/www/{domain}"
+        os.makedirs(site_root, exist_ok=True)
+
+        # 根据部署类型创建不同的测试页面
+        if os.path.exists(os.path.join(root_path, 'package.json')):
+            await self._create_node_page(site_root, domain)
+        elif os.path.exists(os.path.join(root_path, 'requirements.txt')):
+            await self._create_php_page(site_root, domain)
+        elif os.path.exists(os.path.join(root_path, 'composer.json')):
+            await self._create_php_page(site_root, domain)
+        elif os.path.exists(os.path.join(root_path, 'index.html')):
+            await self._create_static_page(site_root, domain)
+        else:
+            raise ValueError(f"不支持的部署类型: {root_path}")
+
+        # 设置目录权限
+        os.system(f"chown -R nginx:nginx {site_root}")
+        os.system(f"chmod -R 755 {site_root}")
+
+    async def _create_static_page(self, site_root: str, domain: str):
+        """创建静态测试页面"""
+        index_path = os.path.join(site_root, 'index.html')
+        with open(index_path, 'w') as f:
+            f.write(f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Welcome to {domain}</title>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            margin: 40px auto;
+            max-width: 800px;
+            padding: 20px;
+            text-align: center;
+        }}
+        h1 {{
+            color: #333;
+        }}
+        .info {{
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }}
+    </style>
+</head>
+<body>
+    <h1>Welcome to {domain}</h1>
+    <div class="info">
+        <p>This is a static test page.</p>
+        <p>Site root: {site_root}</p>
+        <p>Deployed time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+    </div>
+</body>
+</html>
+            """)
+
+    async def _create_php_page(self, site_root: str, domain: str):
+        """创建PHP测试页面"""
+        index_path = os.path.join(site_root, 'index.php')
+        with open(index_path, 'w') as f:
+            f.write(f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Welcome to {domain}</title>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            margin: 40px auto;
+            max-width: 800px;
+            padding: 20px;
+            text-align: center;
+        }}
+        h1 {{
+            color: #333;
+        }}
+        .info {{
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }}
+    </style>
+</head>
+<body>
+    <h1>Welcome to {domain}</h1>
+    <div class="info">
+        <p>This is a PHP test page.</p>
+        <p>Site root: <?php echo "{site_root}"; ?></p>
+        <p>Server time: <?php echo date('Y-m-d H:i:s'); ?></p>
+        <p>PHP version: <?php echo phpversion(); ?></p>
+    </div>
+</body>
+</html>
+            """)
+
+    async def _create_node_page(self, site_root: str, domain: str):
+        """创建Node.js测试页面"""
+        # 创建package.json
+        package_json = {
+            "name": domain.replace(".", "-"),
+            "version": "1.0.0",
+            "description": f"Test site for {domain}",
+            "main": "index.js",
+            "scripts": {
+                "start": "node index.js"
+            },
+            "dependencies": {
+                "express": "^4.17.1"
+            }
+        }
+        
+        with open(os.path.join(site_root, 'package.json'), 'w') as f:
+            json.dump(package_json, f, indent=2)
+
+        # 创建index.js
+        with open(os.path.join(site_root, 'index.js'), 'w') as f:
+            f.write(f"""
+const express = require('express');
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {{
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Welcome to {domain}</title>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    margin: 40px auto;
+                    max-width: 800px;
+                    padding: 20px;
+                    text-align: center;
+                }}
+                h1 {{
+                    color: #333;
+                }}
+                .info {{
+                    background: #f8f9fa;
+                    border-radius: 8px;
+                    padding: 20px;
+                    margin-top: 20px;
+                }}
+            </style>
+        </head>
+        <body>
+            <h1>Welcome to {domain}</h1>
+            <div class="info">
+                <p>This is a Node.js test page.</p>
+                <p>Site root: {site_root}</p>
+                <p>Server time: ${{new Date().toLocaleString()}}</p>
+                <p>Node.js version: ${{process.version}}</p>
+            </div>
+        </body>
+        </html>
+    `);
+}});
+
+app.listen(port, () => {{
+    console.log(`Server running at http://localhost:${{port}}`);
+}});
+            """)
+
+        # 安装依赖
+        os.system(f"cd {site_root} && npm install")
