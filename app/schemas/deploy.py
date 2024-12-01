@@ -6,6 +6,7 @@ class DeployRequest(BaseModel):
     """部署请求模型"""
     domain: str
     enable_ssl: bool = False
+    deploy_type: str = 'static'
     ssl_email: Optional[str] = None
     root_path: Optional[str] = None
     custom_config: Optional[str] = None
