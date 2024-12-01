@@ -435,7 +435,7 @@ server {
                         async with aiofiles.open(conf_path, 'r') as f:
                             content = await f.read()
                     except Exception as e:
-                        self.logger.error(f"读取配置文件失败 {conf_path}: {str(e)}")
+                        self.logger.error(f"读取配置文���失败 {conf_path}: {str(e)}")
                         continue
 
                     # 解析配置文件
@@ -662,7 +662,7 @@ server {
                                 # 没有新的日志，等待一会再读
                                 await asyncio.sleep(0.1)
                         except ConnectionClosed:
-                            self.logger.info(f"WebSocket��接已关闭")
+                            self.logger.info(f"WebSocket接已关闭")
                             break
                         except Exception as e:
                             self.logger.error(f"发送日志行时出错: {str(e)}")
@@ -750,30 +750,33 @@ server {
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            stdout, _ = await process.communicate()
+            stdout, stderr = await process.communicate()
             
+            if stderr:
+                self.logger.error(f"获取网络统计失败: {stderr.decode()}")
+                return {
+                    'in_bytes': 0,
+                    'out_bytes': 0
+                }
+
             # 解析流量数据
             data = stdout.decode().strip().split()
             if len(data) >= 5:
-                rx_bytes = float(data[3]) * 1024  # 转换为字节
+                rx_bytes = float(data[3]) * 1024  # 转换为字节/秒
                 tx_bytes = float(data[4]) * 1024
             else:
                 rx_bytes = tx_bytes = 0
 
-            # 获取历史数据
-            history = await self._get_network_history()
-
             return {
                 'in_bytes': rx_bytes,
-                'out_bytes': tx_bytes,
-                'history': history
+                'out_bytes': tx_bytes
             }
+
         except Exception as e:
             self.logger.error(f"获取网络统计失败: {str(e)}")
             return {
                 'in_bytes': 0,
-                'out_bytes': 0,
-                'history': []
+                'out_bytes': 0
             }
 
     async def _get_network_history(self) -> List[Dict[str, Any]]:
@@ -861,7 +864,7 @@ server {
                     total_stats['used'] += used
                     total_stats['free'] += free
                     
-                    # 记录每个路��的详细信息
+                    # 记录每个路的详细信息
                     total_stats['paths'][path] = {
                         'size': dir_size,
                         'total': total,

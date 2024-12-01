@@ -674,30 +674,43 @@ function toggleAutoScroll() {
 
  
 
-// 全局变量保存图表实例
+// 全局变量保存图表实例和数据
 let networkChart = null;
 let diskChart = null;
+let networkData = {
+    labels: Array(30).fill(''),
+    inData: Array(30).fill(0),
+    outData: Array(30).fill(0)
+};
 
 // 更新网络流量图表
 function updateNetworkChart(data) {
     const ctx = document.getElementById('networkUsageChart');
     if (!ctx) return;
 
+    // 更新数据数组
+    networkData.labels.shift();
+    networkData.labels.push(new Date().toLocaleTimeString('zh-CN', { hour12: false }));
+    networkData.inData.shift();
+    networkData.inData.push(data.in_bytes);
+    networkData.outData.shift();
+    networkData.outData.push(data.out_bytes);
+
     if (!networkChart) {
         networkChart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: data.history.map(d => d.time),
+                labels: networkData.labels,
                 datasets: [
                     {
                         label: '入站流量',
-                        data: data.history.map(d => d.in),
+                        data: networkData.inData,
                         borderColor: '#36a2eb',
                         fill: false
                     },
                     {
                         label: '出站流量',
-                        data: data.history.map(d => d.out),
+                        data: networkData.outData,
                         borderColor: '#ff6384',
                         fill: false
                     }
@@ -706,21 +719,34 @@ function updateNetworkChart(data) {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                animation: {
+                    duration: 0
+                },
                 scales: {
                     y: {
                         beginAtZero: true,
                         ticks: {
-                            callback: value => formatBytes(value)
+                            callback: value => formatBytes(value) + '/s'
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: context => {
+                                const value = context.raw;
+                                return `${context.dataset.label}: ${formatBytes(value)}/s`;
+                            }
                         }
                     }
                 }
             }
         });
     } else {
-        networkChart.data.labels = data.history.map(d => d.time);
-        networkChart.data.datasets[0].data = data.history.map(d => d.in);
-        networkChart.data.datasets[1].data = data.history.map(d => d.out);
-        networkChart.update();
+        networkChart.data.labels = networkData.labels;
+        networkChart.data.datasets[0].data = networkData.inData;
+        networkChart.data.datasets[1].data = networkData.outData;
+        networkChart.update('none'); // 禁用动画以提高性能
     }
 }
 
