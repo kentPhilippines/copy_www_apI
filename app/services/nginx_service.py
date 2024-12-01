@@ -422,20 +422,18 @@ server {
                 return []
 
             conf_files = [f for f in os.listdir(conf_dir) if f.endswith('.conf')]
-            self.logger.info(f"找到 {len(conf_files)} 个配置文件")
 
             for file_name in conf_files:
                 try:
                     domain = file_name[:-5]  # 移除 .conf 后缀
                     conf_path = os.path.join(conf_dir, file_name)
-                    self.logger.info(f"正在处理站点配置: {domain}")
                     
                     # 读取配置文件内容
                     try:
                         async with aiofiles.open(conf_path, 'r') as f:
                             content = await f.read()
                     except Exception as e:
-                        self.logger.error(f"读取配置文���失败 {conf_path}: {str(e)}")
+                        self.logger.error(f"读取配置文件失败 {conf_path}: {str(e)}")
                         continue
 
                     # 解析配置文件
@@ -462,7 +460,6 @@ server {
                     self.logger.error(f"处理配置文件失败 {file_name}: {str(e)}", exc_info=True)
                     continue
 
-            self.logger.info(f"成功解析 {len(sites)} 个站点配置")
             return sites
 
         except Exception as e:
@@ -502,10 +499,7 @@ server {
 
             # 检查站点状态
             site_info.update(await self._check_site_status(domain, site_info))
-
-            self.logger.info(f"站点 {domain} 配置解析完成: 状态={site_info['status']}, "
-                           f"SSL启用={site_info['ssl_enabled']}, "
-                           f"端口={site_info['ports'] + site_info['ssl_ports']}")
+ 
 
             return site_info
 
