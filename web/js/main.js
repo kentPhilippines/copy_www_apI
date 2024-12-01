@@ -166,7 +166,7 @@ function updateStatusDisplay(status) {
     // 更新磁盘使用图表
     updateDiskChart(status.resources.disk);
 
-    // 更新资源使用��示
+    // 更新资源使用示
     document.getElementById('network-traffic').textContent = 
         `↑${formatBytes(status.resources.network.out_bytes)}/s ↓${formatBytes(status.resources.network.in_bytes)}/s`;
     
@@ -203,16 +203,16 @@ async function updateSitesList() {
                     </td>
                     <td>
                         <div class="access-urls">
-                            ${site.access_urls.http.map(url => `
+                            ${site.access_urls?.http?.map(url => `
                                 <a href="${url}" target="_blank" class="url-link">
                                     <span class="protocol">HTTP</span>
                                 </a>
-                            `).join('')}
-                            ${site.access_urls.https ? site.access_urls.https.map(url => `
+                            `).join('') || ''}
+                            ${site.access_urls?.https?.map(url => `
                                 <a href="${url}" target="_blank" class="url-link">
                                     <span class="protocol secure">HTTPS</span>
                                 </a>
-                            `).join('') : ''}
+                            `).join('') || ''}
                         </div>
                     </td>
                     <td>
@@ -381,7 +381,7 @@ async function handleLogTypeChange(event) {
     const logContent = document.getElementById('log-content');
     logContent.textContent = '';
 
-    // ��取初始日志内容
+    // 取初始日志内容
     await handleRefreshLogs();
 
     // 启动实时日志
@@ -678,7 +678,7 @@ function toggleAutoScroll() {
 let networkChart = null;
 let diskChart = null;
 
-// 更新网���流量图表
+// 更新网络流量图表
 function updateNetworkChart(data) {
     const ctx = document.getElementById('networkUsageChart');
     if (!ctx) return;

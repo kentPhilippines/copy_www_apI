@@ -409,7 +409,7 @@ server {
                 'error': e.output.decode()
             }
 
-    async def list_sites(self) -> List[NginxSite]:
+    async def list_sites(self) -> List[Dict[str, Any]]:
         """获取所有网站配置"""
         try:
             self.logger.info("开始获取所有网站配置...")
@@ -441,7 +441,7 @@ server {
                     # 解析配置文件
                     site_info = await self._parse_site_config(domain, conf_path, content)
                     if site_info:
-                        # 转换为 NginxSite 模型
+                        # 转换为字典
                         site = NginxSite(
                             domain=site_info['domain'],
                             config_file=site_info['config_file'],
@@ -456,7 +456,7 @@ server {
                             access_urls=AccessUrls(**site_info['access_urls']) if site_info.get('access_urls') else None,
                             logs=LogPaths(**site_info['logs']) if site_info.get('logs') else None
                         )
-                        sites.append(site)
+                        sites.append(site.dict())  # 转换为字典
 
                 except Exception as e:
                     self.logger.error(f"处理配置文件失败 {file_name}: {str(e)}", exc_info=True)
@@ -468,8 +468,7 @@ server {
         except Exception as e:
             self.logger.error(f"获取站点列表失败: {str(e)}", exc_info=True)
             # 返回测试数据
-            test_data = self._get_test_site_data()
-            return [NginxSite(**site) for site in test_data]
+            return self._get_test_site_data()
 
     async def _parse_site_config(self, domain: str, conf_path: str, content: str) -> Optional[Dict[str, Any]]:
         """解析站点配置文件"""
@@ -663,7 +662,7 @@ server {
                                 # 没有新的日志，等待一会再读
                                 await asyncio.sleep(0.1)
                         except ConnectionClosed:
-                            self.logger.info(f"WebSocket连接已关闭")
+                            self.logger.info(f"WebSocket��接已关闭")
                             break
                         except Exception as e:
                             self.logger.error(f"发送日志行时出错: {str(e)}")
@@ -862,7 +861,7 @@ server {
                     total_stats['used'] += used
                     total_stats['free'] += free
                     
-                    # 记录每个路径的详细信息
+                    # 记录每个路��的详细信息
                     total_stats['paths'][path] = {
                         'size': dir_size,
                         'total': total,

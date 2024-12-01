@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, WebSocket, Query, WebSocketDisconnect
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from app.services.nginx_service import NginxService
 from app.schemas.nginx import (
     NginxSite,
@@ -33,7 +33,7 @@ async def delete_site(domain: str):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.get("/sites", response_model=List[NginxSite])
+@router.get("/sites", response_model=List[Dict[str, Any]])
 async def list_sites():
     """获取所有网站配置"""
     return await nginx_service.list_sites()
