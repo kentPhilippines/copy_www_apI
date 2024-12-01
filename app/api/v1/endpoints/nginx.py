@@ -6,7 +6,7 @@ from app.schemas.nginx import (
     NginxStatus,
     NginxResponse
 )
-from starlette.websockets import ConnectionClosed
+from websockets.exceptions import ConnectionClosed
 
 router = APIRouter()
 nginx_service = NginxService()

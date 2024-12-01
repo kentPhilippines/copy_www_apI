@@ -12,7 +12,7 @@ import re
 from datetime import datetime
 from fastapi import WebSocket
 import asyncio
-from websockets.legacy.protocol import ConnectionClosed
+from websockets.exceptions import ConnectionClosed
 import random
 from datetime import timedelta
 import json
