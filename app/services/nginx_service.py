@@ -412,7 +412,6 @@ server {
     async def list_sites(self) -> List[Dict[str, Any]]:
         """获取所有网站配置"""
         try:
-            self.logger.info("开始获取所有网站配置...")
             sites = []
             conf_dir = "/etc/nginx/conf.d"
             
