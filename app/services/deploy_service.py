@@ -387,38 +387,160 @@ class DeployService:
         with open(index_path, 'w') as f:
             f.write(f"""
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-    <title>Welcome to {domain}</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{domain} - 站点信息</title>
     <style>
         body {{
-            font-family: Arial, sans-serif;
-            margin: 40px auto;
-            max-width: 800px;
-            padding: 20px;
-            text-align: center;
-        }}
-        h1 {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 40px 20px;
+            background: #f8f9fa;
             color: #333;
         }}
-        .info {{
+        .container {{
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 15px rgba(0,0,0,0.1);
+            padding: 30px;
+        }}
+        h1 {{
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }}
+        .info-section {{
+            margin-bottom: 30px;
+            padding: 20px;
             background: #f8f9fa;
             border-radius: 8px;
-            padding: 20px;
-            margin-top: 20px;
+            border-left: 4px solid #007bff;
+        }}
+        .info-section h2 {{
+            color: #007bff;
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }}
+        .info-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }}
+        .info-item {{
+            padding: 15px;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }}
+        .info-item strong {{
+            display: block;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }}
+        .info-item span {{
+            color: #666;
+            word-break: break-all;
+        }}
+        .status {{
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            background: #28a745;
+            color: white;
+        }}
+        .footer {{
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #666;
+        }}
+        .path {{
+            font-family: monospace;
+            padding: 8px;
+            background: #f1f3f5;
+            border-radius: 4px;
+            font-size: 0.9em;
         }}
     </style>
 </head>
 <body>
-    <h1>Welcome to {domain}</h1>
-    <div class="info">
-        <p>This is a static test page.</p>
-        <p>Site root: {site_root}</p>
-        <p>Deployed time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+    <div class="container">
+        <h1>{domain}</h1>
+        
+        <div class="info-section">
+            <h2>基础信息</h2>
+            <div class="info-grid">
+                <div class="info-item">
+                    <strong>部署状态</strong>
+                    <span class="status">已部署</span>
+                </div>
+                <div class="info-item">
+                    <strong>部署时间</strong>
+                    <span>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</span>
+                </div>
+                <div class="info-item">
+                    <strong>站点类型</strong>
+                    <span>静态网站</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-section">
+            <h2>路径配置</h2>
+            <div class="info-grid">
+                <div class="info-item">
+                    <strong>站点根目录</strong>
+                    <div class="path">{site_root}</div>
+                </div>
+                <div class="info-item">
+                    <strong>配置文件</strong>
+                    <div class="path">/etc/nginx/conf.d/{domain}.conf</div>
+                </div>
+                <div class="info-item">
+                    <strong>访问日志</strong>
+                    <div class="path">/var/log/nginx/{domain}.access.log</div>
+                </div>
+                <div class="info-item">
+                    <strong>错误日志</strong>
+                    <div class="path">/var/log/nginx/{domain}.error.log</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-section">
+            <h2>服务器信息</h2>
+            <div class="info-grid">
+                <div class="info-item">
+                    <strong>Web服务器</strong>
+                    <span>Nginx</span>
+                </div>
+                <div class="info-item">
+                    <strong>操作系统</strong>
+                    <span>Linux</span>
+                </div>
+                <div class="info-item">
+                    <strong>服务器时间</strong>
+                    <span>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>此页面由 Nginx Manager 自动生成</p>
+            <p>部署时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+        </div>
     </div>
 </body>
 </html>
-            """)
+        """)
 
     async def _create_php_page(self, site_root: str, domain: str):
         """创建PHP测试页面"""
