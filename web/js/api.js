@@ -95,7 +95,7 @@ class API {
 
     async getSite(domain) {
         try {
-            const response = await this.request(`/sites/sites/${domain}`);
+            const response = await this.request(`/sites/${domain}`);
             return {
                 domain: response.domain,
                 status: response.status || 'unknown',

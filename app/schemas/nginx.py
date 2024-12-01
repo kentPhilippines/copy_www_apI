@@ -27,6 +27,8 @@ class NginxSite(BaseModel):
     ports: List[int] = [80]
     ssl_ports: List[int] = []
     ssl_enabled: bool = False
+    ssl_certificate: Optional[str] = None
+    ssl_certificate_key: Optional[str] = None
     status: str = "unknown"
     error: Optional[str] = None
     ssl_info: Optional[SSLInfo] = None
