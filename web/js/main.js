@@ -166,7 +166,7 @@ function updateStatusDisplay(status) {
     // 更新磁盘使用图表
     updateDiskChart(status.resources.disk);
 
-    // 更新资源使用显示
+    // 更新资源使用��示
     document.getElementById('network-traffic').textContent = 
         `↑${formatBytes(status.resources.network.out_bytes)}/s ↓${formatBytes(status.resources.network.in_bytes)}/s`;
     
@@ -381,7 +381,7 @@ async function handleLogTypeChange(event) {
     const logContent = document.getElementById('log-content');
     logContent.textContent = '';
 
-    // 获取初始日志内容
+    // ��取初始日志内容
     await handleRefreshLogs();
 
     // 启动实时日志
@@ -395,7 +395,7 @@ async function handleRefreshLogs() {
     const logContent = document.getElementById('log-content');
 
     try {
-        const logs = await api.getLogs(logType, lines);  // ���要在 API 类中添加这个方法
+        const logs = await api.getLogs(logType, lines);  // 要在 API 类中添加这个方法
         if (logs) {
             logContent.textContent = logs.join('\n');
         }
@@ -678,7 +678,7 @@ function toggleAutoScroll() {
 let networkChart = null;
 let diskChart = null;
 
-// 更新网络流量图表
+// 更新网���流量图表
 function updateNetworkChart(data) {
     const ctx = document.getElementById('networkUsageChart');
     if (!ctx) return;
@@ -764,4 +764,138 @@ function formatBytes(bytes) {
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// 查看站点详情
+async function handleViewSiteDetails(domain) {
+    try {
+        const site = await api.getSite(domain);
+        if (!site) {
+            showToast('站点不存在', 'error');
+            return;
+        }
+
+        const content = document.createElement('div');
+        content.className = 'site-details';
+        content.innerHTML = `
+            <div class="detail-section">
+                <h4>基本信息</h4>
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <label>配置文件:</label>
+                        <span class="file-path" title="${site.config_file}">${site.config_file}</span>
+                    </div>
+                    <div class="detail-item">
+                        <label>根目录:</label>
+                        <span class="file-path ${site.root_exists ? '' : 'not-exists'}" 
+                              title="${site.root_path}">${site.root_path}</span>
+                    </div>
+                    <div class="detail-item">
+                        <label>端口:</label>
+                        <span>HTTP: ${site.ports.join(', ')} | HTTPS: ${site.ssl_ports.join(', ') || '无'}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="detail-section">
+                <h4>SSL证书</h4>
+                ${site.ssl_enabled && site.ssl_info ? `
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <label>证书文件:</label>
+                            <span class="file-path ${site.ssl_info.cert_exists ? '' : 'not-exists'}" 
+                                  title="${site.ssl_info.cert_path}">${site.ssl_info.cert_path}</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>密钥文件:</label>
+                            <span class="file-path ${site.ssl_info.key_exists ? '' : 'not-exists'}" 
+                                  title="${site.ssl_info.key_path}">${site.ssl_info.key_path}</span>
+                        </div>
+                    </div>
+                ` : '<p>未启用SSL</p>'}
+            </div>
+
+            <div class="detail-section">
+                <h4>日志文件</h4>
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <label>访问日志:</label>
+                        <span class="file-path" title="${site.logs.access_log}">${site.logs.access_log}</span>
+                        <button class="btn btn-sm btn-info" onclick="viewLog('${domain}', 'access')">
+                            查看日志
+                        </button>
+                    </div>
+                    <div class="detail-item">
+                        <label>错误日志:</label>
+                        <span class="file-path" title="${site.logs.error_log}">${site.logs.error_log}</span>
+                        <button class="btn btn-sm btn-info" onclick="viewLog('${domain}', 'error')">
+                            查看日志
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="detail-section">
+                <h4>资源使用情况</h4>
+                <div class="resource-charts">
+                    <div class="chart-container">
+                        <h5>网络流量</h5>
+                        <canvas id="networkChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h5>磁盘使用</h5>
+                        <canvas id="diskChart"></canvas>
+                    </div>
+                </div>
+                <div class="resource-stats">
+                    <div class="stat-item">
+                        <label>总流量:</label>
+                        <span>${formatBytes(site.stats?.total_traffic || 0)}</span>
+                    </div>
+                    <div class="stat-item">
+                        <label>请求数:</label>
+                        <span>${site.stats?.requests_count || 0}/分钟</span>
+                    </div>
+                    <div class="stat-item">
+                        <label>磁盘使用:</label>
+                        <span>${formatBytes(site.stats?.disk_usage || 0)} / ${formatBytes(site.stats?.disk_quota || 0)}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        await showDialog(`站点详情 - ${domain}`, content);
+
+        // 初始化图表
+        if (site.stats) {
+            initNetworkChart(site.stats.network_history);
+            initDiskChart(site.stats.disk_usage, site.stats.disk_quota);
+        }
+
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
+
+// 查看日志
+async function viewLog(domain, type) {
+    try {
+        // 切换到日志页面
+        switchPage('logs');
+        
+        // 设置日志类型和域名
+        document.getElementById('log-type').value = type;
+        const domainSelect = document.getElementById('log-domain');
+        if (domainSelect) {
+            domainSelect.value = domain;
+        }
+        
+        // 刷新日志内容
+        await handleRefreshLogs();
+        
+        // 启动实时日志
+        initLogWebSocket(type, domain);
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
 }
