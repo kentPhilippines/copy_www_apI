@@ -108,17 +108,34 @@ class DeployService:
         try:
             # 步骤1: 创建基础站点配置（不包含SSL）
             logger.info(f"步骤1: 创建基础站点配置 - {request.domain}")
+            
+            # 创建站点目录
+            site_root = f"/var/www/{request.domain}"
+            os.makedirs(site_root, exist_ok=True)
+
+            # 创建测试页面
+            if request.deploy_type == 'static':
+                await self._create_static_page(site_root, request.domain)
+            elif request.deploy_type == 'php':
+                await self._create_php_page(site_root, request.domain)
+            elif request.deploy_type == 'node':
+                await self._create_node_page(site_root, request.domain)
+            else:
+                await self._create_static_page(site_root, request.domain)  # 默认创建静态页面
+
+            # 设置目录权限
+            os.system(f"chown -R nginx:nginx {site_root}")
+            os.system(f"chmod -R 755 {site_root}")
+
+            # 创建Nginx配置
             nginx_site = NginxSite(
                 domain=request.domain,
-                root_path=f"/var/www/{request.domain}",
+                root_path=site_root,
                 ssl_enabled=False  # 初始不启用SSL
             )
             
             # 创建基础站点
             result = await self.nginx_service.create_site(nginx_site)
-            
-            # 创建测试页面
-            await self._create_test_page(request.domain, result.data["root_path"])
 
             # 步骤2: 如果需要SSL，申请证书
             ssl_info = None
@@ -156,33 +173,29 @@ class DeployService:
 
             # 准备访问URL
             access_urls = {
-                "http": f"http://{request.domain}",
-                "https": f"https://{request.domain}" if ssl_info else None
+                "http": [f"http://{request.domain}"],
+                "https": [f"https://{request.domain}"] if ssl_info else []
             }
 
-            # 准备返回数据
-            response_data = {
-                **result.data,
-                "ssl_enabled": bool(ssl_info),
-                "ssl_info": ssl_info,
-                "access_urls": access_urls
-            }
-            
             return DeployResponse(
                 success=True,
-                message=f"站点 {request.domain} 部署成功" + 
-                        (" (无SSL)" if not ssl_info else f" (含SSL)\n访问地址:\nHTTP: http://{request.domain}\nHTTPS: https://{request.domain}"),
-                data=response_data
+                message=f"站点 {request.domain} 部署成功",
+                data={
+                    "domain": request.domain,
+                    "root_path": site_root,
+                    "deploy_type": request.deploy_type,
+                    "ssl_enabled": bool(ssl_info),
+                    "ssl_info": ssl_info,
+                    "access_urls": access_urls
+                }
             )
 
         except Exception as e:
-            logger.error(f"部署失败: {str(e)}")
-            # 清理失败的部署
-            try:
-                await self.remove_site(request.domain)
-            except Exception as cleanup_error:
-                logger.error(f"清理失败的部署时出错: {str(cleanup_error)}")
-            raise
+            logger.error(f"部署站点失败 {request.domain}: {str(e)}")
+            return DeployResponse(
+                success=False,
+                message=str(e)
+            )
 
     async def remove_site(self, domain: str) -> DeployResponse:
         """移除站点"""
@@ -367,28 +380,6 @@ class DeployService:
                 success=False,
                 message=str(e)
             )
-
-    async def _create_test_page(self, domain: str, root_path: str):
-        """创建测试页面"""
-        # 创建站点目录
-        site_root = f"/var/www/{domain}"
-        os.makedirs(site_root, exist_ok=True)
-
-        # 根据部署类型创建不同的测试页面
-        if os.path.exists(os.path.join(root_path, 'package.json')):
-            await self._create_node_page(site_root, domain)
-        elif os.path.exists(os.path.join(root_path, 'requirements.txt')):
-            await self._create_php_page(site_root, domain)
-        elif os.path.exists(os.path.join(root_path, 'composer.json')):
-            await self._create_php_page(site_root, domain)
-        elif os.path.exists(os.path.join(root_path, 'index.html')):
-            await self._create_static_page(site_root, domain)
-        else:
-            raise ValueError(f"不支持的部署类型: {root_path}")
-
-        # 设置目录权限
-        os.system(f"chown -R nginx:nginx {site_root}")
-        os.system(f"chmod -R 755 {site_root}")
 
     async def _create_static_page(self, site_root: str, domain: str):
         """创建静态测试页面"""
