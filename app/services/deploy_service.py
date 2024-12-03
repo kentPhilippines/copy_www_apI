@@ -680,13 +680,18 @@ app.listen(port, () => {{
             # 获取目标站点的每一个内容
             response = requests.get(target_url)
             soup = BeautifulSoup(response.content, 'html.parser')
-
-            # Save the HTML content
+            #替换目标站点tdk
+            if request.tdk:
+                soup = self._replace_tdk(soup, request.tdk_rules)
+            #生成蜘蛛地图
+            if request.sitemap:
+                self._generate_sitemap(target_url, os.path.join(dest_folder, 'sitemap.xml'))
+            # 保存目标站点的HTML内容
             html_filename = os.path.join(dest_folder, 'index.html')
             with open(html_filename, 'w', encoding='utf-8') as f:
                 f.write(str(soup))
 
-            # Download all resources
+            # 下载所有资源 包括link script img
             for tag in soup.find_all(['link', 'script', 'img']):
                 resource_url = tag.get('href') or tag.get('src')
                 if resource_url:
@@ -715,3 +720,30 @@ app.listen(port, () => {{
             return save_path
         except Exception as e:
             print(f"Failed to download {url}: {e}")
+    
+    def _replace_tdk(self, soup: BeautifulSoup, tdk_rules: Dict[str, str]):
+        """替换目标站点的tdk"""
+        for key, value in tdk_rules.items():
+            soup.replace(key, value)
+        return soup
+    
+    def _generate_sitemap(self, base_url, output_file):    
+        visited_urls = set()
+        urls_to_visit = {base_url}
+
+        while urls_to_visit:
+            current_url = urls_to_visit.pop()
+            if current_url in visited_urls:
+                continue
+            visited_urls.add(current_url)
+            new_links = self._get_all_links(current_url, base_url)
+            urls_to_visit.update(new_links - visited_urls)
+
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
+            f.write('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n')
+            for url in visited_urls:
+                f.write(f'  <url>\n')
+                f.write(f'    <loc>{url}</loc>\n')
+                f.write(f'  </url>\n')
+            f.write('</urlset>\n')

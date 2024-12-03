@@ -264,3 +264,6 @@ fi
 #   source venv/bin/activate && ./scripts/install.sh
 
 #   ./scripts/install.sh
+#   source venv/bin/activate && ./scripts/start.sh
+# cd $(pwd)
+# source venv/bin/activate && ./scripts/start.sh

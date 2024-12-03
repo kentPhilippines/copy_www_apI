@@ -89,3 +89,23 @@ async def get_logs(
     return await nginx_service.get_log_content(log_type, lines, domain)
 
 
+@router.websocket("/nginx/ws")
+async def websocket_nginx(websocket: WebSocket):
+    """Nginx状态WebSocket接口"""
+    try:
+        await nginx_service.tail_nginx_status(websocket)
+    except WebSocketDisconnect:
+        logger.info("WebSocket连接断开")
+    except ConnectionClosed:
+        logger.info("WebSocket连接关闭")
+    except Exception as e:
+        logger.error(f"WebSocket错误: {str(e)}")
+        try:
+            await websocket.send_text(f"错误: {str(e)}")
+        except:
+            pass
+    finally:
+        try:
+            await websocket.close()
+        except:
+            pass

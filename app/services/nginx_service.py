@@ -891,3 +891,9 @@ server {
         except Exception as e:
             self.logger.error(f"获取目录大小失败 {path}: {str(e)}")
             return 0
+
+    async def tail_nginx_status(self, websocket: WebSocket):
+        """实时读取Nginx状态"""
+        while True:
+            await websocket.send_text(self.get_status())
+            await asyncio.sleep(0.5)

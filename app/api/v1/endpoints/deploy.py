@@ -83,3 +83,10 @@ async def mirror_site(request: MirrorRequest):
         return await deploy_service.mirror_site(request)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+@router.post("/sites/mirror/sitemap", response_model=MirrorResponse)
+async def mirror_site_sitemap(request: MirrorRequest):
+    """镜像站点蜘蛛地图"""
+    try:
+        return await deploy_service.mirror_site_sitemap(request)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
