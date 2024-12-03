@@ -57,5 +57,8 @@ async def auto_update():
     # 1. 拉取最新代码 在当前项目的根目录执行 git pull
     # 获取当前项目的根目录  
     current_dir = os.path.dirname(os.path.abspath(__file__))
+    # 执行 git pull
     await run_command(f"cd {current_dir} && git pull")
+    # 打印日志
+    logger.info("已拉取最新代码")
     pass
