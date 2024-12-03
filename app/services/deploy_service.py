@@ -2,15 +2,18 @@ import os
 import aiofiles
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from app.schemas.deploy import DeployRequest, DeployResponse, SiteUpdateRequest, SiteBackupInfo, SiteListResponse
+from app.schemas.deploy import DeployRequest, DeployResponse, SiteUpdateRequest, SiteBackupInfo, SiteListResponse,MirrorRequest,MirrorResponse
 from app.services.nginx_service import NginxService
 from app.services.ssl_service import SSLService
 from app.schemas.nginx import NginxSite, NginxSiteInfo, SSLInfo, LogPaths, AccessUrls, DeployInfo
 from app.core.logger import setup_logger
 from app.core.config import settings
+from bs4 import BeautifulSoup
 import shutil
 import subprocess
+import requests
 import json
+from urllib.parse import urljoin, urlparse
 
 logger = setup_logger(__name__)
 
@@ -381,6 +384,8 @@ class DeployService:
                 message=str(e)
             )
 
+
+
     async def _create_static_page(self, site_root: str, domain: str):
         """创建静态测试页面"""
         index_path = os.path.join(site_root, 'index.html')
@@ -653,3 +658,60 @@ app.listen(port, () => {{
 
         # 安装依赖
         os.system(f"cd {site_root} && npm install")
+    
+    async def mirror_site(self, request: MirrorRequest):
+        """镜像站点"""
+        try:
+            # 1. 检查源站点是否存在
+            source_site = await self.get_site_info(request.domain)
+            if not source_site:
+                raise ValueError(status_code=404, detail=f"站点 {request.domain} 不存在")
+            
+            # 2. 检查源站点路径
+            source_path = request.path
+            if not os.path.exists(source_path):
+                raise ValueError(status_code=404, detail=f"站点 {request.domain} 路径 {source_path} 不存在")
+            dest_folder = source_path
+            # 3. 检查目标站点是否存在 获取目标站点信息 http请求
+            target_url = f"http://{request.target_domain}"
+            response = requests.get(target_url)
+            if response.status_code != 200:
+                raise ValueError(status_code=404, detail=f"站点 {request.target_domain} 不存在")
+            # 获取目标站点的每一个内容
+            response = requests.get(target_url)
+            soup = BeautifulSoup(response.content, 'html.parser')
+
+            # Save the HTML content
+            html_filename = os.path.join(dest_folder, 'index.html')
+            with open(html_filename, 'w', encoding='utf-8') as f:
+                f.write(str(soup))
+
+            # Download all resources
+            for tag in soup.find_all(['link', 'script', 'img']):
+                resource_url = tag.get('href') or tag.get('src')
+                if resource_url:
+                    full_url = urljoin(target_url, resource_url)
+                    await self.download_file(full_url, dest_folder)
+            return  MirrorResponse(
+                success=True,
+                message="站点镜像成功"
+            )
+        except Exception as e:
+            return MirrorResponse(
+                success=False,
+                message=str(e)
+            )
+    async def download_file(self, url, output_dir):
+        try:
+            response = requests.get(url)
+            response.raise_for_status()
+            parsed_url = urlparse(url)
+            path = parsed_url.path.strip("/") or "index.html"
+            save_path = os.path.join(output_dir, path)
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            with open(save_path, "wb") as file:
+                file.write(response.content)
+            print(f"Saved: {save_path}")
+            return save_path
+        except Exception as e:
+            print(f"Failed to download {url}: {e}")

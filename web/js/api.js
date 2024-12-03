@@ -17,120 +17,108 @@ class API {
                     ...options.headers
                 }
             });
+
+            const data = await response.json();
             
             if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.detail || `HTTP error! status: ${response.status}`);
+                throw new Error(data.detail || '请求失败');
             }
-            
-            return await response.json();
+
+            return data;
         } catch (error) {
-            console.error('API请求错误:', error);
+            console.error('API请求失败:', error);
             throw error;
         }
     }
 
-    // Nginx状态
+    // 设置API基础地址
+    setBaseURL(url) {
+        this.baseURL = url;
+        localStorage.setItem('apiUrl', url);
+    }
+
+    // 通用请求方法
+    async request(endpoint, options = {}) {
+        try {
+            const response = await fetch(`${this.baseURL}${endpoint}`, {
+                ...options,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...options.headers
+                }
+            });
+
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.detail || '请求失败');
+            }
+
+            return data;
+        } catch (error) {
+            console.error('API请求失败:', error);
+            throw error;
+        }
+    }
+
+    // 获取Nginx运行状态
     async getNginxStatus() {
         return this.request('/nginx/status');
     }
 
-    // 站点管理
-    async createSite(siteData) {
+    // 获取站点列表
+    async getSites() {
+        return this.request('/deploy/sites');
+    }
+
+    // 创建新站点
+    async createSite(data) {
         return this.request('/deploy/sites', {
             method: 'POST',
-            body: JSON.stringify({
-                domain: siteData.domain,
-                deploy_type: siteData.deploy_type,
-                enable_ssl: siteData.enable_ssl,
-                ssl_email: siteData.ssl_email
-            })
+            body: JSON.stringify(data)
         });
     }
 
+    // 获取单个站点信息
+    async getSite(domain) {
+        return this.request(`/deploy/sites/${domain}`);
+    }
+
+    // 更新站点配置
+    async updateSite(domain, data) {
+        return this.request(`/deploy/sites/${domain}`, {
+            method: 'PUT', 
+            body: JSON.stringify(data)
+        });
+    }
+
+    // 删除站点
     async deleteSite(domain) {
-        return this.request(`/nginx/sites/${domain}`, {
+        return this.request(`/deploy/sites/${domain}`, {
             method: 'DELETE'
         });
     }
 
-    // SSL证书
-    async createSSL(domain) {
-        return this.request('/ssl/create', {
-            method: 'POST',
-            body: JSON.stringify({ domain })
-        });
-    }
-
-    async renewSSL(domain) {
-        return this.request('/ssl/renew', {
-            method: 'POST',
-            body: JSON.stringify({ domain })
-        });
-    }
-
-    // 配置管理
+    // 测试Nginx配置
     async testConfig() {
-        return this.request('/nginx/test-config');
+        return this.request('/nginx/test');
     }
 
+    // 重载Nginx配置
     async reloadConfig() {
         return this.request('/nginx/reload');
     }
 
-    // 站点列表
-    async getSites() {
-        return this.request('/nginx/sites');
-    }
-
-    // SSL证书列表
-    async getSSLList() {
-        return this.request('/ssl/list');
-    }
-
-    // 获取日志
-    async getLogs(type, lines) {
-        return this.request(`/nginx/logs/${type}?lines=${lines}`);
-    }
-
-    async getSite(domain) {
-        try {
-            const response = await this.request(`/sites/${domain}`);
-            return {
-                domain: response.domain,
-                status: response.status || 'unknown',
-                config_file: response.config_file,
-                root_path: response.root_path,
-                root_exists: response.root_exists,
-                ports: response.ports || [],
-                ssl_ports: response.ssl_ports || [],
-                ssl_enabled: response.ssl_enabled,
-                ssl_info: response.ssl_info,
-                logs: response.logs || {
-                    access_log: '/var/log/nginx/access.log',
-                    error_log: '/var/log/nginx/error.log'
-                },
-                access_urls: response.access_urls || {
-                    http: [],
-                    https: []
-                }
-            };
-        } catch (error) {
-            console.error('获取站点详情失败:', error);
-            throw new Error('获取站点详情失败');
-        }
-    }
-
-    async updateSite(domain, updates) {
-        return this.request(`/sites/${domain}`, {
-            method: 'PUT',
-            body: JSON.stringify(updates)
+    // 获取日志内容
+    async getLogs(type, lines = 100, domain = '') {
+        const params = new URLSearchParams({ 
+            type,  // 日志类型: access/error
+            lines, // 显示行数
+            domain // 站点域名(可选)
         });
-    }
-
-    async backupSite(domain) {
-        return this.request(`/sites/${domain}/backup`, {
-            method: 'POST'
-        });
+        return this.request(`/nginx/logs?${params}`);
     }
 }
+
+// 创建全局API实例
+window.api = new API(); 

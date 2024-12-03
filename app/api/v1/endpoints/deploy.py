@@ -6,7 +6,10 @@ from app.schemas.deploy import (
     DeployResponse,
     SiteUpdateRequest,
     SiteBackupInfo,
-    SiteListResponse
+    SiteListResponse,
+    MirrorRequest,
+    MirrorResponse,
+    LogResponse
 )
 from app.schemas.nginx import NginxSiteInfo
 
@@ -63,3 +66,20 @@ async def backup_site(domain: str):
         return await deploy_service.backup_site(domain)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) 
+    
+
+@router.get("/sites/{domain}/logs", response_model=LogResponse)
+async def get_site_logs(domain: str):
+    """获取站点日志"""
+    try:
+        return await deploy_service.get_site_logs(domain)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+@router.post("/sites/mirror", response_model=MirrorResponse)
+async def mirror_site(request: MirrorRequest):
+    """镜像站点"""
+    try:
+        return await deploy_service.mirror_site(request)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
