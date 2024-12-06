@@ -29,8 +29,15 @@ app.include_router(sites.router, prefix=f"{settings.API_V1_STR}/sites", tags=["�
 
 @app.on_event("startup")
 async def startup_event():
-    """启动时执行"""
-    await initialize_database()
+    """应用启动时的初始化"""
+    from app.api.v1.endpoints.deploy import deploy_service
+    await deploy_service.start()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """应用关闭时的清理"""
+    from app.api.v1.endpoints.deploy import deploy_service
+    await deploy_service.stop()
 
 @app.get("/")
 async def root():

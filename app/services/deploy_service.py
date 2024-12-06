@@ -25,6 +25,7 @@ from app.schemas.deploy import (
 from app.services.nginx_service import NginxService
 from app.services.ssl_service import SSLService
 from app.utils.download_manager import DownloadManager
+from app.db.base import SessionLocal
 
 logger = setup_logger(__name__)
 
@@ -35,7 +36,22 @@ class DeployService:
         self.nginx_service = NginxService()
         self.ssl_service = SSLService()
         self.logger = logger
-        self.download_manager = DownloadManager()
+        self.db = SessionLocal()
+        self.download_manager = DownloadManager(db=self.db)
+
+    def __del__(self):
+        """析构函数，确保关闭数据库连接"""
+        if hasattr(self, 'db'):
+            self.db.close()
+
+    async def start(self):
+        """启动服务"""
+        await self.download_manager.start()
+
+    async def stop(self):
+        """停止服务"""
+        await self.download_manager.stop()
+        self.db.close()
 
     async def get_site_info(self, domain: str) -> Optional[NginxSiteInfo]:
         """获取单个站点的详细信息"""
