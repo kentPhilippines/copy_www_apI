@@ -817,3 +817,31 @@ app.listen(port, () => {{
         except Exception as e:
             self.logger.error(f"下载失败: {src} - {str(e)}")
             return False
+
+
+    async def get_mirror_status(self, domain: str):
+        """获取镜像状态"""
+        mirror_config_path = os.path.join(request.target_path, '.mirror-config.json')
+        if os.path.exists(mirror_config_path):
+            with open(mirror_config_path, 'r') as f:
+                return json.load(f)
+        else:
+            return None
+    async def refresh_mirror(self, domain: str):
+        """刷新镜像"""
+        mirror_config_path = os.path.join(request.target_path, '.mirror-config.json')
+        if os.path.exists(mirror_config_path):
+            os.remove(mirror_config_path)
+            # 重新镜像
+            return await self.mirror_site(request)
+        else:
+            return MirrorResponse(success=False, message="镜像不存在")
+
+    async def delete_mirror(self, domain: str):
+        """删除镜像"""
+        mirror_config_path = os.path.join(request.target_path, '.mirror-config.json')
+        if os.path.exists(mirror_config_path):
+            os.remove(mirror_config_path)
+            return MirrorResponse(success=True, message="镜像删除完成")
+        else:
+            return MirrorResponse(success=False, message="镜像不存在")
