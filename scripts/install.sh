@@ -151,7 +151,6 @@ install_system_deps() {
 
 
     # 设置Nginx目录权限
-    mkdir -p /copy_www_apI/web
     chown -R nginx:nginx /copy_www_apI/web
     chmod -R 755 /copy_www_apI/web
 
@@ -261,12 +260,14 @@ main() {
 # 执行安装
 main
 # 获取当前内网地址
-IP=$(hostname -I | awk '{print $1}')
+IP=$(host myip.opendns.com resolver1.opendns.com | grep "has address" | awk '{ print $4 }')
+#复制web目录到 /var/www/html
+cp -r copy_www_apI/web /var/www/html
 #在conf.d 目录下创建 default.conf 文件
 echo "server {
-    listen 80;
+    listen 8001;
     server_name $IP;
-    root /copy_www_apI/web;
+    root /var/www/html;
     index index.html index.htm;
     location / {
         try_files $uri $uri/ =404;
