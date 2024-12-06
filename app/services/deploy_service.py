@@ -7,6 +7,7 @@ from datetime import datetime
 from urllib.parse import urljoin, urlparse
 from typing import List, Dict, Any, Optional
 from bs4 import BeautifulSoup
+from pathlib import Path
 
 from app.core.logger import setup_logger
 from app.core.config import settings
@@ -673,67 +674,94 @@ app.listen(port, () => {{
             # 1. 检查源站点是否存在
             source_site = await self.get_site_info(request.domain)
             if not source_site:
-                raise ValueError(status_code=404, detail=f"站点 {request.domain} 不存在")
+                raise ValueError(f"站点 {request.domain} 不存在")
             
-            # 2. 检查源站点路径
-            source_path = request.path
-            if not os.path.exists(source_path):
-                raise ValueError(status_code=404, detail=f"站点 {request.domain} 路径 {source_path} 不存在")
-            dest_folder = source_path
-            # 3. 检查目标站点是否存在 获取目标站点信息 http请求
-            target_url = f"http://{request.target_domain}"
-            response = requests.get(target_url)
-            if response.status_code != 200:
-                raise ValueError(status_code=404, detail=f"站点 {request.target_domain} 不存在")
-            # 获取目标站点的每一个内容
-            response = requests.get(target_url)
-            soup = BeautifulSoup(response.content, 'html.parser')
-            #替换目标站点tdk
-            if request.tdk:
-                soup = self._replace_tdk(soup, request.tdk_rules)
-            #生成蜘蛛地图
-            if request.sitemap:
-                self._generate_sitemap(target_url, os.path.join(dest_folder, 'sitemap.xml'))
-            # 保存目标站���的HTML内容
-            html_filename = os.path.join(dest_folder, 'index.html')
-            with open(html_filename, 'w', encoding='utf-8') as f:
-                f.write(str(soup))
-
-            # 下载所有资源 包括link script img
-            for tag in soup.find_all(['link', 'script', 'img']):
-                resource_url = tag.get('href') or tag.get('src')
-                if resource_url:
-                    full_url = urljoin(target_url, resource_url)
-                    await self.download_file(full_url, dest_folder)
-            return  MirrorResponse(
-                success=True,
-                message="站点镜像成功"
-            )
+            # 2. 处理目标域名 - 移除协议前缀
+            target_domain = request.target_domain
+            if target_domain.startswith(('http://', 'https://')):
+                target_domain = target_domain.split('://', 1)[1]
+            
+            # 3. 确保目标路径存在
+            os.makedirs(request.target_path, exist_ok=True)
+            
+            # 4. 构建完整的目标URL
+            target_url = f"https://{target_domain}"
+            
+            try:
+                # 5. 获取目标站点内容
+                response = requests.get(target_url, verify=False, timeout=30)
+                response.raise_for_status()
+                
+                # 6. 解析HTML
+                soup = BeautifulSoup(response.content, 'html.parser')
+                
+                # 7. TDK替换
+                if request.tdk and request.tdk_rules:
+                    if 'title' in request.tdk_rules:
+                        title_tag = soup.find('title')
+                        if title_tag:
+                            title_tag.string = request.tdk_rules['title']
+                    
+                    if 'keywords' in request.tdk_rules:
+                        keywords_tag = soup.find('meta', attrs={'name': 'keywords'})
+                        if keywords_tag:
+                            keywords_tag['content'] = request.tdk_rules['keywords']
+                    
+                    if 'description' in request.tdk_rules:
+                        desc_tag = soup.find('meta', attrs={'name': 'description'})
+                        if desc_tag:
+                            desc_tag['content'] = request.tdk_rules['description']
+                
+                # 8. 保存HTML
+                index_path = os.path.join(request.target_path, 'index.html')
+                with open(index_path, 'w', encoding='utf-8') as f:
+                    f.write(str(soup))
+                
+                # 9. 下载资源文件
+                for tag in soup.find_all(['link', 'script', 'img']):
+                    src = tag.get('src') or tag.get('href')
+                    if src:
+                        if src.startswith('//'):
+                            src = f'https:{src}'
+                        elif src.startswith('/'):
+                            src = f'{target_url}{src}'
+                        elif not src.startswith(('http://', 'https://')):
+                            src = urljoin(target_url, src)
+                        
+                        try:
+                            res = requests.get(src, verify=False, timeout=10)
+                            if res.ok:
+                                # 构建本地保存路径
+                                local_path = os.path.join(request.target_path, urlparse(src).path.lstrip('/'))
+                                os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                                with open(local_path, 'wb') as f:
+                                    f.write(res.content)
+                        except Exception as e:
+                            self.logger.warning(f"下载资源失败 {src}: {str(e)}")
+                
+                # 10. 生成站点地图
+                if request.sitemap:
+                    sitemap_path = os.path.join(request.target_path, 'sitemap.xml')
+                    self._generate_sitemap(target_url, sitemap_path)
+                
+                return MirrorResponse(
+                    success=True,
+                    message="站点镜像成功",
+                    data={
+                        "target_path": request.target_path,
+                        "files_count": len(list(Path(request.target_path).rglob('*')))
+                    }
+                )
+                
+            except requests.RequestException as e:
+                raise ValueError(f"获取目标站点失败: {str(e)}")
+                
         except Exception as e:
+            self.logger.error(f"镜像站点失败: {str(e)}")
             return MirrorResponse(
                 success=False,
                 message=str(e)
             )
-    async def download_file(self, url, output_dir):
-        try:
-            response = requests.get(url)
-            response.raise_for_status()
-            parsed_url = urlparse(url)
-            path = parsed_url.path.strip("/") or "index.html"
-            save_path = os.path.join(output_dir, path)
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            with open(save_path, "wb") as file:
-                file.write(response.content)
-            print(f"Saved: {save_path}")
-            return save_path
-        except Exception as e:
-            print(f"Failed to download {url}: {e}")
-    
-    def _replace_tdk(self, soup: BeautifulSoup, tdk_rules: Dict[str, str]):
-        """替换目标站点的tdk"""
-        for key, value in tdk_rules.items():
-            soup.replace(key, value)
-        return soup
     
     def _generate_sitemap(self, base_url, output_file):    
         visited_urls = set()

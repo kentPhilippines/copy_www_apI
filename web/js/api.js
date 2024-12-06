@@ -1,6 +1,6 @@
 class API {
     constructor() {
-        this.baseURL = localStorage.getItem('apiUrl') || 'http://8.218.57.117:8000/api/v1';
+        this.baseURL = localStorage.getItem('apiUrl') || 'http://8.210.194.181:8000/api/v1';
     }
 
     setBaseURL(url) {
@@ -117,6 +117,14 @@ class API {
             domain // 站点域名(可选)
         });
         return this.request(`/nginx/logs?${params}`);
+    }
+
+    // 镜像站点
+    async mirrorSite(data) {
+        return this.request('/deploy/sites/mirror', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
     }
 }
 

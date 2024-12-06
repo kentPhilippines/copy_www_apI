@@ -673,16 +673,20 @@ server {
             except:
                 pass
 
-    async def get_log_content(self, log_type: str, lines: int = 100, domain: str = None) -> List[str]:
+    async def get_log_content(self, log_type: str, lines: int = 100, domain: Optional[str] = None) -> List[str]:
         """获取日志内容"""
         try:
             # 确定日志文件路径
             if domain:
+                # 域名相关的日志
                 log_file = f"/var/log/nginx/{domain}.{log_type}.log"
             else:
+                # Nginx 主日志
                 log_file = f"/var/log/nginx/{log_type}.log"
 
+            # 检查文件是否存在
             if not os.path.exists(log_file):
+                self.logger.error(f"日志文件不存在: {log_file}")
                 return [f"日志文件不存在: {log_file}"]
 
             # 使用 tail 命令读取最后N行
@@ -698,6 +702,7 @@ server {
                 self.logger.error(f"读取日志失败: {stderr.decode()}")
                 return [f"读取日志失败: {stderr.decode()}"]
 
+            # 将日志内容按行分割并返回
             return stdout.decode().splitlines()
 
         except Exception as e:
