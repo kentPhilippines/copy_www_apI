@@ -122,41 +122,88 @@ start_api() {
     # 确保requirements.txt中的依赖已安装
     pip install -r requirements.txt
     
-    # 启动服务 后台启动
-    nohup python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    # 创建日志目录
+    mkdir -p logs
+    
+    # 启动服务 - 使用更好的后台运行方式
+    nohup python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload > logs/api.log 2>&1 &
+    
+    # 保存PID
+    echo $! > .api.pid
+    
+    # 等待服务启动
+    sleep 3
+    
     # 检查服务是否启动
-    if ! pgrep -f "uvicorn main:app --host 0.0.0.0 --port 8000 --reload" > /dev/null; then
-        error "API服务启动失败"
+    if ! ps -p $(cat .api.pid) > /dev/null; then
+        error "API服务启动失败，请检查 logs/api.log"
         exit 1
     fi
-    # 检查端口
-    check_port 8001 
-    # 8001 为前台访问页面 这里给出提示语就可以了, 请访问为当前服务器的IP地址:8001
-    info "API服务启动成功，请访问 http://$(hostname -I | awk '{print $1}'):8001"
+    
+    # 检查端口是否正常监听
+    if ! lsof -Pi :8000 -sTCP:LISTEN -t >/dev/null; then
+        error "API服务端口未正常监听，请检查 logs/api.log"
+        exit 1
+    fi
+    
+    info "API服务启动成功!"
+    info "API地址: http://$(hostname -I | awk '{print $1}'):8000"
+    info "管理界面: http://$(hostname -I | awk '{print $1}'):8001"
+    info "日志文件: $(pwd)/logs/api.log"
+    
+    # 显示日志尾部
+    info "最近的日志输出:"
+    tail -n 5 logs/api.log
 }
 
-# 主流程
-main() {
-    info "启动 Nginx Deploy API 服务..."
-    
-    # 检查命令
-    check_commands
-    
-    # 检查虚拟环境
-    check_venv
-    
-    # 如果虚拟环境不存在，创建并安装依赖
-    setup_venv
-    
-    # 检查服务
-    check_services
-    
-    # 检查目录
-    setup_directories
-    
-    # 启动API
+# 添加停止函数
+stop_api() {
+    if [ -f .api.pid ]; then
+        pid=$(cat .api.pid)
+        if ps -p $pid > /dev/null; then
+            kill $pid
+            info "API服务已停止 (PID: $pid)"
+        else
+            warn "API服务未运行"
+        fi
+        rm .api.pid
+    else
+        warn "未找到PID文件"
+    fi
+}
+
+# 添加重启函数
+restart_api() {
+    info "重启API服务..."
+    stop_api
+    sleep 2
     start_api
 }
 
-# 执行
-main
+# 修改主函数，支持命令行参数
+main() {
+    case "$1" in
+        start)
+            info "启动 Nginx Deploy API 服务..."
+            check_commands
+            check_venv
+            setup_venv
+            check_services
+            setup_directories
+            start_api
+            ;;
+        stop)
+            stop_api
+            ;;
+        restart)
+            restart_api
+            ;;
+        *)
+            echo "用法: $0 {start|stop|restart}"
+            exit 1
+            ;;
+    esac
+}
+
+# 执行主函数，传入命令行参数
+main "${1:-start}"

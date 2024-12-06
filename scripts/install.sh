@@ -280,7 +280,7 @@ if [ $? -eq 0 ]; then
     info "你可以通过以下命令启动API服务："
     echo "cd $(pwd)"
     echo "source venv/bin/activate"
-    echo "./scripts/start.sh"
+    echo "./scripts/start.sh start"
     info "==================================="
 else
     error "安装过程中出现错误，请检查日志"
