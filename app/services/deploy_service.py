@@ -230,7 +230,7 @@ class DeployService:
                 message=f"站点 {domain} 已移除"
             )
         except Exception as e:
-            logger.error(f"移除站点失败: {str(e)}")
+            logger.error(f"移除站点失: {str(e)}")
             raise 
 
     async def list_sites(self) -> SiteListResponse:
@@ -494,7 +494,7 @@ class DeployService:
         <h1>{domain}</h1>
         
         <div class="info-section">
-            <h2>基础信息</h2>
+            <h2>���础信息</h2>
             <div class="info-grid">
                 <div class="info-item">
                     <strong>部署状态</strong>
@@ -512,7 +512,7 @@ class DeployService:
         </div>
 
         <div class="info-section">
-            <h2>路径配置</h2>
+            <h2>路径配</h2>
             <div class="info-grid">
                 <div class="info-item">
                     <strong>站点根目录</strong>
@@ -671,489 +671,149 @@ app.listen(port, () => {{
 
         # 安装依赖
         os.system(f"cd {site_root} && npm install")
-    
+    # 镜像站点
     async def mirror_site(self, request: MirrorRequest):
         """镜像站点"""
-       
-        mirror_log = []  # 用于记录详细日志
-        downloaded_urls = set()  # 已下载的URL集合
+        mirror_log = []
+        downloaded_urls = set()
         
         def add_log(message: str, level: str = 'info'):
-            """添加日志"""
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            mirror_log.append({
-                'time': timestamp,
-                'level': level,
-                'message': message
-            })
-            if level == 'error':
-                self.logger.error(message)
-            elif level == 'warning':
-                self.logger.warning(message)
-            else:
-                self.logger.info(message)
+            mirror_log.append({'time': timestamp, 'level': level, 'message': message})
+            getattr(self.logger, level)(message)
 
         try:
-            add_log(f"开始镜像站点: {request.domain} -> {request.target_domain}")
-            
-            # 1. 检查源站点
-            source_site = await self.get_site_info(request.domain)
-            if not source_site:
-                add_log(f"源站点不存在: {request.domain}", 'error')
-                return MirrorResponse(
-                    success=False,
-                    message=f"源站点不存在: {request.domain}",
-                    logs=mirror_log
-                )
-            
-            # 2. 处理目标域名
-            target_domain = request.target_domain
-            if target_domain.startswith(('http://', 'https://')):
-                add_log(f"处理目标域名: {target_domain}")
-                target_domain = target_domain.split('://', 1)[1]
-            
-            # 3. 创建目录
-            try:
-                os.makedirs(request.target_path, exist_ok=True)
-                add_log(f"创建目标目录: {request.target_path}")
-            except Exception as e:
-                add_log(f"创建目录失败: {str(e)}", 'error')
-                return MirrorResponse(
-                    success=False,
-                    message=f"创建目录失败: {str(e)}",
-                    logs=mirror_log
-                )
-            
+            # 1. 基础检查
+            add_log(f"开始镜像: {request.domain} -> {request.target_domain}")
+            if not await self.get_site_info(request.domain):
+                raise ValueError(f"源站点不存在: {request.domain}")
 
-            # 4. 获取目标站点内容
+            # 2. 准备目标路径
+            target_domain = request.target_domain.split('://')[-1]
+            os.makedirs(request.target_path, exist_ok=True)
+
+            # 3. 开始镜像
             target_url = f"https://{target_domain}"
-            add_log(f"开始获取目标站点: {target_url}")
+            await self._process_link(target_url, request.target_path, downloaded_urls, add_log)
+
+            # 4. 保存配置
+            mirror_config = {
+                'target_domain': target_domain,
+                'mirror_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'files_count': len(downloaded_urls),
+                'sitemap': request.sitemap,
+                'tdk': request.tdk
+            }
             
-            try:
-                response = requests.get(target_url, verify=False, timeout=30)
-                response.raise_for_status()
-                add_log(f"获取目标站点成功: {len(response.content)} 字节")
-                # 保存目标站点内容
-                with open(os.path.join(request.target_path, 'index.html'), 'wb') as f:
-                    f.write(response.content)
-                add_log(f"保存目标站点内容: {len(response.content)} 字节")
-                #@
-                # 5. 解析HTML
-                soup = BeautifulSoup(response.content, 'html.parser')
-                
-                # 6. 处理所有可点击元素
-                clickable_elements = soup.find_all(['a', 'button', 'input[type="submit"]', 
-                    'input[type="button"]', '[onclick]', '[href]', '[role="button"]'])
-                add_log(f"找到 {len(clickable_elements)} 个可点击元素")
-                
-                # 处理每个链接
-                for element in clickable_elements:
-                    logger.info(f"处理元素: {element}")
-                    href = element.get('href')
-                    if not href:
-                        continue
-                    
-                    if href.startswith(('#', 'javascript:', 'mailto:', 'tel:')):
-                        add_log(f"跳过特殊链接: {href}", 'info')
-                        continue
-                    
-                    full_url = urljoin(target_url, href)
-                    if full_url.startswith(target_url) and full_url not in downloaded_urls:
-                        try:
-                            add_log(f"处理链接: {full_url}")
-                            await self._process_link(full_url, request.target_path, downloaded_urls, add_log)
-                        except Exception as e:
-                            add_log(f"处理链接失败 {full_url}: {str(e)}", 'warning')
+            with open(os.path.join(request.target_path, '.mirror-config.json'), 'w') as f:
+                json.dump(mirror_config, f, indent=2)
 
-                # 7. 处理资源文件
-                resource_tags = soup.find_all(['link', 'script', 'img', 'video', 'audio', 'source'])
-                add_log(f"找到 {len(resource_tags)} 个资源文件")
-                
-                downloaded = 0
-                failed = 0
-                for tag in resource_tags:
-                    src = tag.get('src') or tag.get('href')
-                    if src:
-                        try:
-                            success = await self._download_resource(src, target_url, request.target_path, downloaded_urls)
-                            if success:
-                                downloaded += 1
-                                add_log(f"下载资源成功: {src}")
-                            else:
-                                failed += 1
-                                add_log(f"下载资源失败: {src}", 'warning')
-                        except Exception as e:
-                            failed += 1
-                            add_log(f"下载资源出错: {src} - {str(e)}", 'warning')
-
-                # 8. 保存配置
-                mirror_config = {
-                    'target_domain': target_domain,
-                    'mirror_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'files_count': downloaded,
-                    'sitemap': request.sitemap,
-                    'tdk': request.tdk,
-                    'logs': mirror_log
-                }
-                
-                config_file = os.path.join(request.target_path, '.mirror-config.json')
-                logger.info(f"保存镜像配置: {config_file}")
-                with open(config_file, 'w') as f:
-                    json.dump(mirror_config, f, indent=2)
-                
-                add_log(f"镜像完成: 成功 {downloaded} 个文件, 失败 {failed} 个文件")
-                
-                return MirrorResponse(
-                    success=True,
-                    message=f"站点镜像成功: 下载成功 {downloaded} 个文件, 失败 {failed} 个文件",
-                    data={
-                        "target_path": request.target_path,
-                        "files_count": downloaded,
-                        "failed_count": failed
-                    },
-                    logs=mirror_log
-                )
-                
-            except Exception as e:
-                add_log(f"镜像过程出错: {str(e)}", 'error')
-                return MirrorResponse(
-                    success=False,
-                    message=f"镜像失败: {str(e)}",
-                    logs=mirror_log
-                )
-                
-        except Exception as e:
-            add_log(f"镜像站点失败: {str(e)}", 'error')
             return MirrorResponse(
-                success=False,
-                message=f"镜像站点失败: {str(e)}",
+                success=True,
+                message=f"镜像完成: 下载了 {len(downloaded_urls)} 个文件",
+                data={"files_count": len(downloaded_urls)},
                 logs=mirror_log
             )
-    
-    def _generate_sitemap(self, base_url, output_file):    
-        visited_urls = set()
-        urls_to_visit = {base_url}
-
-        while urls_to_visit:
-            current_url = urls_to_visit.pop()
-            if current_url in visited_urls:
-                continue
-            visited_urls.add(current_url)
-            new_links = self._get_all_links(current_url, base_url)
-            urls_to_visit.update(new_links - visited_urls)
-
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
-            f.write('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n')
-            for url in visited_urls:
-                f.write(f'  <url>\n')
-                f.write(f'    <loc>{url}</loc>\n')
-                f.write(f'  </url>\n')
-            f.write('</urlset>\n')
-
-    async def _process_page_resources(self, soup: BeautifulSoup, base_url: str, target_path: str, downloaded_urls: set):
-        """处理页面中的资源文件"""
-        # 处理所有资源标签
-        for tag in soup.find_all(['link', 'script', 'img', 'video', 'audio', 'source', 'iframe']):
-            src = tag.get('src') or tag.get('href') or tag.get('data-src')
-            if src:
-                try:
-                    if src.startswith('//'):
-                        src = f'https:{src}'
-                    elif src.startswith('/'):
-                        src = f'{base_url}{src}'
-                    elif not src.startswith(('http://', 'https://')):
-                        src = urljoin(base_url, src)
-                    
-                    if src not in downloaded_urls:
-                        res = requests.get(src, verify=False, timeout=10)
-                        if res.ok:
-                            local_path = os.path.join(target_path, urlparse(src).path.lstrip('/'))
-                            os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                            with open(local_path, 'wb') as f:
-                                f.write(res.content)
-                            downloaded_urls.add(src)
-                            self.logger.debug(f"下载资源成功: {src}")
-                        else:
-                            self.logger.warning(f"资源下载失败: {src}, 状态码: {res.status_code}")
-                except Exception as e:
-                    self.logger.warning(f"下载资源失败 {src}: {str(e)}")
-
-    async def get_mirror_status(self, domain: str) -> MirrorStatus:
-        """获取站点镜像状态"""
-        try:
-            # 检查站点是否存在
-            site = await self.get_site_info(domain)
-            if not site:
-                raise ValueError(f"站点不存在: {domain}")
-
-            # 检查镜像配置文件
-            mirror_config_file = os.path.join(site.root_path, '.mirror-config.json')
-            if not os.path.exists(mirror_config_file):
-                return MirrorStatus(exists=False)
-
-            # 读取镜像配置
-            try:
-                with open(mirror_config_file, 'r') as f:
-                    config = json.load(f)
-                    return MirrorStatus(
-                        exists=True,
-                        target_domain=config.get('target_domain'),
-                        mirror_time=config.get('mirror_time'),
-                        files_count=config.get('files_count'),
-                        sitemap=config.get('sitemap', False),
-                        tdk=config.get('tdk', False)
-                    )
-            except Exception as e:
-                self.logger.error(f"读取镜像配置失败: {str(e)}")
-                return MirrorStatus(exists=False)
 
         except Exception as e:
-            self.logger.error(f"获取镜像状态失败: {str(e)}")
-            raise
+            add_log(f"镜像失败: {str(e)}", 'error')
+            return MirrorResponse(success=False, message=str(e), logs=mirror_log)
 
-    async def refresh_mirror(self, domain: str) -> MirrorResponse:
-        """刷新站点镜像"""
+    async def _process_link(self, url: str, target_path: str, downloaded_urls: set, add_log, depth=0, max_depth=10):
+        """递归处理链接"""
+        if depth > max_depth or url in downloaded_urls:
+            return
+
         try:
-            # 获取站点信息
-            site = await self.get_site_info(domain)
-            if not site:
-                raise ValueError(f"站点不存在: {domain}")
-
-            # 检查镜像配置
-            mirror_config_file = os.path.join(site.root_path, '.mirror-config.json')
-            if not os.path.exists(mirror_config_file):
-                raise ValueError(f"站点 {domain} 未配置镜像")
-
-            # 读取原镜像配置
-            with open(mirror_config_file, 'r') as f:
-                config = json.load(f)
-
-            # 构建刷新请求
-            refresh_request = MirrorRequest(
-                domain=domain,
-                target_domain=config['target_domain'],
-                target_path=site.root_path,
-                overwrite=True,  # 强制覆盖
-                sitemap=config.get('sitemap', False),
-                tdk=config.get('tdk', False),
-                tdk_rules=config.get('tdk_rules')
-            )
-
-            # 重新执行镜像
-            return await self.mirror_site(refresh_request)
-
-        except Exception as e:
-            self.logger.error(f"刷新镜像失败: {str(e)}")
-            return MirrorResponse(
-                success=False,
-                message=f"刷新镜像失败: {str(e)}"
-            )
-
-    async def delete_mirror(self, domain: str) -> MirrorResponse:
-        """删除站点镜像"""
-        try:
-            # 获取站点信息
-            site = await self.get_site_info(domain)
-            if not site:
-                raise ValueError(f"站点不存在: {domain}")
-
-            # 检查镜像配置
-            mirror_config_file = os.path.join(site.root_path, '.mirror-config.json')
-            if not os.path.exists(mirror_config_file):
-                raise ValueError(f"站点 {domain} 未配置镜像")
-
-            try:
-                # 删除所有文件，但保留目
-                for item in os.listdir(site.root_path):
-                    item_path = os.path.join(site.root_path, item)
-                    if os.path.isfile(item_path):
-                        os.remove(item_path)
-                    elif os.path.isdir(item_path):
-                        shutil.rmtree(item_path)
-
-                # 删除镜像配置文��
-                os.remove(mirror_config_file)
-
-                # 创建默认的 index.html
-                await self._create_static_page(site.root_path, domain)
-
-                return MirrorResponse(
-                    success=True,
-                    message=f"站点 {domain} 镜像已删除"
-                )
-
-            except Exception as e:
-                self.logger.error(f"删除镜像文件失败: {str(e)}")
-                return MirrorResponse(
-                    success=False,
-                    message=f"删除镜像文件失败: {str(e)}"
-                )
-
-        except Exception as e:
-            self.logger.error(f"删除镜像失败: {str(e)}")
-            return MirrorResponse(
-                success=False,
-                message=f"删除镜像失败: {str(e)}"
-            )
-
-    async def _process_link(self, url: str, target_path: str, downloaded_urls: set, add_log):
-        """处理单个链接"""
-        try:
-            # 获取页面内容
+            # 1. 获取页面内容
+            parsed_url = urlparse(url)
+            if not parsed_url.scheme:
+                url = f"https://{url}"
+            
             response = requests.get(url, verify=False, timeout=30)
             if not response.ok:
-                add_log(f"获取页面失败: {url}, 状态码: {response.status_code}", 'warning')
                 return
 
-            # 解析页面内容
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # 解析相对路径
-            path = urlparse(url).path.lstrip('/')
-            if not path:
-                path = 'index.html'
-            elif not path.endswith(('.html', '.htm')):
+            # 2. 保存页面
+            path = parsed_url.path.lstrip('/') or 'index.html'
+            if not path.endswith(('.html', '.htm', '.php')):
                 path = f"{path}/index.html"
             
-            # 创建目标目录
             page_path = os.path.join(target_path, path)
             os.makedirs(os.path.dirname(page_path), exist_ok=True)
-            
-            # 处理页面中的资源链接
-            for tag in soup.find_all(['img', 'script', 'link', 'video', 'audio', 'source']):
-                src = tag.get('src') or tag.get('href')
-                if not src:
-                    continue
-                    
-                # 处理相对路径
-                if src.startswith('//'):
-                    src = f'https:{src}'
-                elif src.startswith('/'):
-                    src = f"{url.split('//', 1)[0]}//{urlparse(url).netloc}{src}"
-                elif not src.startswith(('http://', 'https://')):
-                    src = urljoin(url, src)
-                
-                # 下载资源
-                if src not in downloaded_urls:
-                    try:
-                        res = requests.get(src, verify=False, timeout=10)
-                        if res.ok:
-                            # 构建本地路径
-                            local_path = os.path.join(target_path, urlparse(src).path.lstrip('/'))
-                            os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                            
-                            # 保存文件
-                            with open(local_path, 'wb') as f:
-                                f.write(res.content)
-                                
-                            downloaded_urls.add(src)
-                            add_log(f"下载资源成功: {src}")
-                            
-                            # 更新标签的src属性为相对路径
-                            relative_path = os.path.relpath(local_path, os.path.dirname(page_path))
-                            if tag.get('src'):
-                                tag['src'] = relative_path
-                            if tag.get('href'):
-                                tag['href'] = relative_path
-                        else:
-                            add_log(f"下载资源失败: {src}, 状态码: {res.status_code}", 'warning')
-                    except Exception as e:
-                        add_log(f"下载资源失败: {src}, 错误: {str(e)}", 'warning')
-            
-            # 处理页面中的链接
+
+            # 3. 解析页面
+            soup = BeautifulSoup(response.content, 'html.parser')
+            base_domain = parsed_url.netloc
+
+            # 4. 处理资源
+            for tag in soup.find_all(['img', 'script', 'link', 'video', 'audio', 'source', 'iframe']):
+                src = tag.get('src') or tag.get('href') or tag.get('data-src')
+                if src and src not in downloaded_urls:
+                    if await self._download_resource(src, url, target_path, downloaded_urls):
+                        relative_path = os.path.relpath(
+                            os.path.join(target_path, urlparse(src).path.lstrip('/')),
+                            os.path.dirname(page_path)
+                        )
+                        if tag.get('src'): tag['src'] = relative_path
+                        if tag.get('href'): tag['href'] = relative_path
+
+            # 5. 处理链接
+            links = []
             for a_tag in soup.find_all('a'):
                 href = a_tag.get('href')
-                if not href:
-                    continue
-                    
-                # 跳过特殊链接
-                if href.startswith(('#', 'javascript:', 'mailto:', 'tel:')):
-                    continue
-                    
-                # 处理相对路径
-                if href.startswith('//'):
-                    href = f'https:{href}'
-                elif href.startswith('/'):
-                    href = f"{url.split('//', 1)[0]}//{urlparse(url).netloc}{href}"
-                elif not href.startswith(('http://', 'https://')):
-                    href = urljoin(url, href)
-                    
-                # 更新为相对路径
-                if href in downloaded_urls:
-                    relative_path = os.path.relpath(
-                        os.path.join(target_path, urlparse(href).path.lstrip('/')),
-                        os.path.dirname(page_path)
-                    )
-                    a_tag['href'] = relative_path
-            
-            # 保存处理后的页面
+                if href and not href.startswith(('#', 'javascript:', 'mailto:', 'tel:')):
+                    full_url = urljoin(url, href)
+                    if urlparse(full_url).netloc == base_domain:
+                        links.append(full_url)
+                        if full_url in downloaded_urls:
+                            a_tag['href'] = os.path.relpath(
+                                os.path.join(target_path, urlparse(full_url).path.lstrip('/')),
+                                os.path.dirname(page_path)
+                            )
+
+            # 6. 保存处理后的页面
             with open(page_path, 'w', encoding='utf-8') as f:
                 f.write(str(soup))
-                
             downloaded_urls.add(url)
-            add_log(f"处理页面成功: {url}")
-            
+            add_log(f"已处理: {url} (深度 {depth})")
+
+            # 7. 递归处理链接
+            for link in links:
+                if link not in downloaded_urls:
+                    await self._process_link(link, target_path, downloaded_urls, add_log, depth + 1, max_depth)
+
         except Exception as e:
-            add_log(f"处理链接失败: {url}, 错误: {str(e)}", 'error')
+            add_log(f"处理失败: {url} - {str(e)}", 'error')
 
     async def _download_resource(self, src: str, base_url: str, target_path: str, downloaded_urls: set) -> bool:
-        """下载单个资源文件
-        
-        Args:
-            src: 资源URL
-            base_url: 基础URL
-            target_path: 目标保存路径
-            downloaded_urls: 已下载URL集合
-        
-        Returns:
-            bool: 下载是否成功
-        """
+        """下载资源文件"""
         try:
-            # 处理相对路径
-            if src.startswith('//'):
-                src = f'https:{src}'
-            elif src.startswith('/'):
-                src = f"{base_url.split('//', 1)[0]}//{urlparse(base_url).netloc}{src}"
-            elif not src.startswith(('http://', 'https://')):
-                src = urljoin(base_url, src)
+            # 1. 处理URL
+            if src.startswith('//'): src = f'https:{src}'
+            elif src.startswith('/'): src = f"{urlparse(base_url).scheme}://{urlparse(base_url).netloc}{src}"
+            elif not src.startswith(('http://', 'https://')): src = urljoin(base_url, src)
             
-            # 如果已经下载过，直接返回成功
             if src in downloaded_urls:
                 return True
-            
-            # 下载资源
+
+            # 2. 下载文件
             response = requests.get(src, verify=False, timeout=10)
             if not response.ok:
-                self.logger.warning(f"下载资源失败: {src}, 状态码: {response.status_code}")
                 return False
-            
-            # 解析文件路径
-            parsed_url = urlparse(src)
-            file_path = parsed_url.path.lstrip('/')
-            if not file_path:
-                # 如果没有路径，使用URL的最后部分作为文件名
-                file_path = parsed_url.netloc.replace('.', '_') + '.html'
-            
-            # 构建本地保存路径
+
+            # 3. 保存文件
+            file_path = urlparse(src).path.lstrip('/') or f"{urlparse(src).netloc.replace('.', '_')}.html"
             local_path = os.path.join(target_path, file_path)
-            
-            # 确保目录存在
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
             
-            # 保存文件
             with open(local_path, 'wb') as f:
                 f.write(response.content)
-            
-            # 给nginx用户添加权限
             await run_command(f"chown nginx:nginx {local_path}")
-
-            # 添加到已下载集合
+            
             downloaded_urls.add(src)
-            
-            self.logger.debug(f"下载资源成功: {src} -> {local_path}")
             return True
-            
+
         except Exception as e:
-            self.logger.error(f"下载资源出错: {src} - {str(e)}")
+            self.logger.error(f"下载失败: {src} - {str(e)}")
             return False
