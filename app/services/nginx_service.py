@@ -164,6 +164,13 @@ server {
     async def create_site(self, site: NginxSite) -> NginxResponse:
         """创建站点配置"""
         try:
+            # 检查SSL配置
+            if site.ssl_enabled and site.ssl_info is None:
+                return NginxResponse(
+                    success=False,
+                    message="启用SSL但未提供证书信息"
+                )
+
             # 初始化Nginx配置
             await self._init_nginx_config()
             
@@ -246,8 +253,8 @@ server {{
     }}
 """
 
-        # 如果启用了SSL
-        if site.ssl_enabled:
+        # 如果启用了SSL且证书信息存在
+        if site.ssl_enabled and site.ssl_info is not None:
             config += f"""
     listen 443 ssl http2;
     ssl_certificate {site.ssl_info.cert_path};
@@ -268,8 +275,8 @@ server {{
 
         config += "}\n"
 
-        # 如果启用了SSL，添加HTTP到HTTPS的重定向
-        if site.ssl_enabled:
+        # 如果启用了SSL且证书信息存在，添加HTTP到HTTPS的重定向
+        if site.ssl_enabled and site.ssl_info is not None:
             config = f"""
 # HTTP重定向到HTTPS
 server {{
@@ -479,7 +486,7 @@ server {{
             }
 
     async def list_sites(self) -> List[Dict[str, Any]]:
-        """获取所有网站配置"""
+        """获取所有网站置"""
         try:
             sites = []
             conf_dir = "/etc/nginx/conf.d"
@@ -636,7 +643,7 @@ server {{
     async def _check_site_status(self, domain: str, site_info: Dict[str, Any]) -> Dict[str, Any]:
         """检查站点状态"""
         try:
-            # 检查配置文件语法
+            # ���查配置文件语法
             await run_command("nginx -t")
             
             # 检查进程是否运行
@@ -707,7 +714,7 @@ server {{
                 return
 
             try:
-                # 打开日志文件并移动到文件末尾
+                # ���开日志文件并移动到文件末尾
                 async with aiofiles.open(log_file, mode='r') as file:
                     # 先移动到文件末尾
                     await file.seek(0, 2)
@@ -747,7 +754,7 @@ server {{
         try:
             # 确定日志文件路径
             if domain:
-                # 域名���关的日志
+                # 域名关的日志
                 log_file = f"/var/log/nginx/{domain}.{log_type}.log"
             else:
                 # Nginx 主日志
@@ -880,7 +887,7 @@ server {{
                             })
                         return history
 
-                self.logger.warning("vnstat数据格式不符合预期，使用模��数据")
+                self.logger.warning("vnstat数据格式不符合预期，使用模数据")
                 return self._get_mock_network_history()
 
             except (json.JSONDecodeError, KeyError, IndexError) as e:
