@@ -19,21 +19,17 @@ class AccessUrls(BaseModel):
     https: Optional[List[str]] = None
 
 class NginxSite(BaseModel):
-    """Nginx站点配置"""
+    """Nginx站点配置模型"""
     domain: str
-    config_file: Optional[str] = None
-    root_path: str
-    root_exists: bool = False
-    ports: List[int] = [80]
-    ssl_ports: List[int] = []
+    root_path: Optional[str] = None
     ssl_enabled: bool = False
-    ssl_certificate: Optional[str] = None
-    ssl_certificate_key: Optional[str] = None
-    status: str = "unknown"
-    error: Optional[str] = None
     ssl_info: Optional[SSLInfo] = None
-    access_urls: Optional[AccessUrls] = None
+    custom_config: Optional[str] = None
+    deploy_type: str = 'static'
+    status: str = 'active'
+    config_file: Optional[str] = None
     logs: Optional[LogPaths] = None
+    access_urls: Optional[AccessUrls] = None
 
 class DeployInfo(BaseModel):
     """部署信息"""

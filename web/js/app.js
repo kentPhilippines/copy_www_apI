@@ -476,6 +476,7 @@ class App {
                 restartBtn.disabled = false;
                 restartBtn.textContent = '重启Nginx';
             }
+        }); 
 
         reloadBtn.addEventListener('click', async () => {
             if (!confirm('确定要重载Nginx配置吗？')) return;
