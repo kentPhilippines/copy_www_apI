@@ -952,166 +952,118 @@ nav a.active {
     padding: 20px;
 }
 
-/* 镜像配置表单样式 */
-.mirror-form {
-    max-width: 600px;
+/* 镜像信息样式 */
+.mirror-info {
+    max-width: 800px;
     margin: 0 auto;
 }
 
-.mirror-form .form-group {
-    margin-bottom: 20px;
-    padding: 20px;
+.mirror-info .info-section {
+    margin-bottom: 30px;
+    padding: 25px;
     background: #f8f9fa;
-    border-radius: 8px;
-    border-left: 4px solid var(--primary-color);
+    border-radius: 12px;
+    border-left: 6px solid #3498db;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     transition: all 0.3s ease;
 }
 
-.mirror-form .form-group:hover {
-    border-left-width: 8px;
-    background: #fff;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+.mirror-info .info-section:hover {
+    transform: translateX(5px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
 }
 
-.mirror-form label {
-    display: block;
-    font-size: 18px;
-    font-weight: 700;
+.mirror-info h4 {
     color: #2c3e50;
-    margin-bottom: 12px;
-    letter-spacing: 0.5px;
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e9ecef;
 }
 
-.mirror-form .required {
-    color: #e74c3c;
-    font-size: 16px;
-    margin-left: 4px;
-}
-
-.mirror-form input[type="text"],
-.mirror-form textarea {
-    width: 100%;
-    padding: 12px;
-    border: 2px solid #e0e0e0;
-    border-radius: 6px;
-    font-size: 16px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-    transition: all 0.3s ease;
-}
-
-.mirror-form input[type="text"]:focus,
-.mirror-form textarea:focus {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
-    outline: none;
-}
-
-.mirror-form input[readonly] {
-    background: #f1f3f5;
-    border-color: #ddd;
-    color: #666;
-    font-weight: 500;
-}
-
-/* 复选框容器样式 */
-.mirror-form .checkbox-group {
+.mirror-info .info-item {
     display: flex;
     align-items: center;
+    margin-bottom: 15px;
     padding: 12px;
     background: white;
-    border-radius: 6px;
-    margin-top: 12px;
-    border: 1px solid #e0e0e0;
-    transition: all 0.3s ease;
-}
-
-.mirror-form .checkbox-group:hover {
-    background: #f8f9fa;
-    border-color: var(--primary-color);
-}
-
-.mirror-form .checkbox-group label {
-    display: flex;
-    align-items: center;
-    font-size: 16px;
-    font-weight: 600;
-    color: #333;
-    margin: 0;
-    cursor: pointer;
-}
-
-.mirror-form .checkbox-group input[type="checkbox"] {
-    margin-right: 12px;
-    width: 20px;
-    height: 20px;
-    cursor: pointer;
-}
-
-/* 提示文本 */
-.mirror-form .hint {
-    font-size: 14px;
-    color: #666;
-    margin-top: 8px;
-    padding-left: 4px;
-    border-left: 2px solid #ddd;
-}
-
-/* TDK规则区域样式 */
-.mirror-form .tdk-rules {
-    background: #fff;
-    padding: 20px;
     border-radius: 8px;
-    border: 2px solid #e0e0e0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
-.mirror-form .tdk-rules label {
-    color: #e74c3c;
+.mirror-info .info-item label {
+    flex: 0 0 120px;
     font-size: 16px;
     font-weight: 600;
+    color: #34495e;
 }
 
-.mirror-form .tdk-rules textarea {
-    min-height: 120px;
-    font-family: 'Monaco', 'Courier New', monospace;
-    font-size: 14px;
-    line-height: 1.6;
-    padding: 15px;
+.mirror-info .info-item span {
+    flex: 1;
+    font-size: 18px;
+    font-weight: 500;
+    color: #3498db;
+    padding: 5px 10px;
+    background: #f8f9fa;
+    border-radius: 4px;
 }
 
-/* 按钮样式优化 */
-.mirror-form .button-group {
+/* 按钮样式 */
+.mirror-info .button-group {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
     margin-top: 30px;
-    text-align: center;
 }
 
-.mirror-form .btn {
-    min-width: 180px;
-    padding: 14px 28px;
+.mirror-info .btn {
+    min-width: 150px;
+    padding: 12px 24px;
     font-size: 16px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 1px;
-    background: var(--primary-color);
-    color: white;
-    border: none;
     border-radius: 6px;
-    cursor: pointer;
     transition: all 0.3s ease;
 }
 
-.mirror-form .btn:hover {
-    background: #2980b9;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+.mirror-info .btn-warning {
+    background: #f39c12;
+    color: white;
+    border: none;
 }
 
-.mirror-form .btn:active {
+.mirror-info .btn-danger {
+    background: #e74c3c;
+    color: white;
+    border: none;
+}
+
+.mirror-info .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.mirror-info .btn:active {
     transform: translateY(0);
 }
 
-.mirror-form .btn:disabled {
-    background: #95a5a6;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-} 
+/* 状态标签 */
+.mirror-info .status-tag {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.mirror-info .status-success {
+    background: #2ecc71;
+    color: white;
+}
+
+.mirror-info .status-pending {
+    background: #f1c40f;
+    color: white;
+}

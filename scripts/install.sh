@@ -275,6 +275,21 @@ else
 fi 
 
 
+# 安装完成后，将 /web/index.html 复制到 /var/www/html/ 目录下
+cp web/index.html /var/www/html/
+#制定默认首页
+echo "server {
+    listen 80;
+    server_name _;
+    root /var/www/html;
+    index index.html index.htm;
+}" > /etc/nginx/conf.d/default.conf
+
+# 重启Nginx
+systemctl restart nginx
+
+
+
 #  直接执行
 #   source venv/bin/activate && ./scripts/install.sh
 

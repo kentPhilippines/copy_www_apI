@@ -795,7 +795,6 @@ class App {
             // 先获取当前站点信息和镜像状态
             const site = await api.getSite(domain);
             const mirrorStatus = await api.getMirrorStatus(domain);
-            
             const modal = document.createElement('div');
             modal.className = 'modal';
             
@@ -842,6 +841,9 @@ class App {
                                     <button class="btn btn-danger" onclick="app.deleteMirror('${domain}')">
                                         删除镜像
                                     </button>
+                                    <button class="btn btn-info" onclick="app.viewMirrorFiles('${domain}')">
+                                        查看镜像文件
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -867,7 +869,7 @@ class App {
                                     <input type="text" name="target_path" required 
                                         value="${site.root_path}" 
                                         readonly
-                                        title="使用当前��点根目录">
+                                        title="使用当前点根目录">
                                     <div class="hint">镜像内容将存放在当前站点根目录</div>
                                 </div>
                                 <div class="form-group">
@@ -995,6 +997,14 @@ class App {
             document.querySelector('.modal').remove();
         } catch (error) {
             this.showError(`删除镜像失败: ${error.message}`);
+        }
+    }
+
+    // 查看镜像文件
+    async viewMirrorFiles(domain) {
+        try {   
+        } catch (error) {
+            this.showError(`查看镜像文件失败: ${error.message}`);
         }
     }
 }
