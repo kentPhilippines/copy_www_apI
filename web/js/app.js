@@ -636,7 +636,7 @@ class App {
                                     </button>
                                 </div>
                                 <div class="details-item">
-                                    <label>错��日志</label>
+                                    <label>错日志</label>
                                     <span class="file-path">${site.logs.error_log}</span>
                                     <button class="btn btn-sm" onclick="app.viewLogs('${domain}', 'error')">
                                         查看日志

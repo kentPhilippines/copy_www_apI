@@ -40,18 +40,13 @@ class SiteListResponse(BaseModel):
 class MirrorRequest(BaseModel):
     """镜像请求模型"""
     domain: str  # 源站点域名
-    path: str  # 源站点路径
     target_domain: str  # 目标站点域名
-    target_path: str  # 目标存放路径  这里就是当前源站点的路径
-    # 是否覆盖
-    overwrite: bool = False
-    #蜘蛛地图
-    sitemap: bool = False
-    # tdk替换
-    tdk: bool = False
-    #tdk替换规则
-    tdk_rules: Optional[Dict[str, str]] = None
-   
+    target_path: str  # 目标存放路径
+    overwrite: bool = False  # 是否覆盖已存在的文件
+    sitemap: bool = False  # 是否生成站点地图
+    tdk: bool = False  # 是否替换TDK信息
+    tdk_rules: Optional[Dict[str, str]] = None  # TDK替换规则
+
 class MirrorResponse(BaseModel):
     """镜像响应模型"""
     success: bool
