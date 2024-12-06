@@ -19,7 +19,8 @@ from app.schemas.deploy import (
     SiteBackupInfo, 
     SiteListResponse,
     MirrorRequest,
-    MirrorResponse
+    MirrorResponse,
+    MirrorStatus
 )
 from app.services.nginx_service import NginxService
 from app.services.ssl_service import SSLService
@@ -548,7 +549,7 @@ class DeployService:
         </div>
 
         <div class="footer">
-            <p>此页面由 Nginx Manager 自动生成</p>
+            <p>此页面由 Nginx Manager 自���生成</p>
             <p>部署时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
         </div>
     </div>
@@ -824,6 +825,19 @@ app.listen(port, () => {{
                     except Exception as e:
                         self.logger.warning(f"生成站点地图失败: {str(e)}")
                 
+                # 在成功镜像后，保存配置信息
+                mirror_config = {
+                    'target_domain': target_domain,
+                    'mirror_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'files_count': downloaded,
+                    'sitemap': request.sitemap,
+                    'tdk': request.tdk
+                }
+
+                config_file = os.path.join(request.target_path, '.mirror-config.json')
+                with open(config_file, 'w') as f:
+                    json.dump(mirror_config, f, indent=2)
+                
                 return MirrorResponse(
                     success=True,
                     message=f"站点镜像成功, 下载成功: {downloaded} 个文件, 失败: {failed} 个文件",
@@ -896,3 +910,36 @@ app.listen(port, () => {{
                             self.logger.warning(f"资源下载失败: {src}, 状态码: {res.status_code}")
                 except Exception as e:
                     self.logger.warning(f"下载资源失败 {src}: {str(e)}")
+
+    async def get_mirror_status(self, domain: str) -> MirrorStatus:
+        """获取站点镜像状态"""
+        try:
+            # 检查站点是否存在
+            site = await self.get_site_info(domain)
+            if not site:
+                raise ValueError(f"站点不存在: {domain}")
+
+            # 检查镜像配置文件
+            mirror_config_file = os.path.join(site.root_path, '.mirror-config.json')
+            if not os.path.exists(mirror_config_file):
+                return MirrorStatus(exists=False)
+
+            # 读取镜像配置
+            try:
+                with open(mirror_config_file, 'r') as f:
+                    config = json.load(f)
+                    return MirrorStatus(
+                        exists=True,
+                        target_domain=config.get('target_domain'),
+                        mirror_time=config.get('mirror_time'),
+                        files_count=config.get('files_count'),
+                        sitemap=config.get('sitemap', False),
+                        tdk=config.get('tdk', False)
+                    )
+            except Exception as e:
+                self.logger.error(f"读取镜像配置失败: {str(e)}")
+                return MirrorStatus(exists=False)
+
+        except Exception as e:
+            self.logger.error(f"获取镜像状态失败: {str(e)}")
+            raise

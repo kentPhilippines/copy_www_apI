@@ -126,6 +126,25 @@ class API {
             body: JSON.stringify(data)
         });
     }
+
+    // 获取镜像状态
+    async getMirrorStatus(domain) {
+        return this.request(`/deploy/sites/${domain}/mirror`);
+    }
+
+    // 刷新镜像
+    async refreshMirror(domain) {
+        return this.request(`/deploy/sites/${domain}/mirror/refresh`, {
+            method: 'POST'
+        });
+    }
+
+    // 删除镜像
+    async deleteMirror(domain) {
+        return this.request(`/deploy/sites/${domain}/mirror`, {
+            method: 'DELETE'
+        });
+    }
 }
 
 // 创建全局API实例
