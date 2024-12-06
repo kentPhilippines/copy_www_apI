@@ -134,6 +134,21 @@ install_system_deps() {
     chmod 755 /etc/letsencrypt
     chmod 755 /var/log/letsencrypt
 
+    # 设置Nginx目录权限
+    mkdir -p /etc/nginx/conf.d
+    chown -R nginx:nginx /etc/nginx/conf.d
+    chmod -R 755 /etc/nginx/conf.d
+
+    # 设置网站目录权限  
+    mkdir -p /var/www
+    chown -R nginx:nginx /var/www
+    chmod -R 755 /var/www
+
+    # 设置日志目录权限
+    mkdir -p /var/log/nginx
+    chown -R nginx:nginx /var/log/nginx 
+    chmod -R 755 /var/log/nginx
+
     info "系统依赖安装完成"
 }
 
