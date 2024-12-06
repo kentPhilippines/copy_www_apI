@@ -362,14 +362,142 @@ const SitesModule = {
     },
 
     async configureMirror(domain) {
+        let ws = null;
+        let reconnectTimer = null;
+        const maxReconnectAttempts = 5;
+        let reconnectAttempts = 0;
+
+        const connectWebSocket = (progressArea) => {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${api.baseURL.split('/api/')[0]}/api/v1/nginx/mirror/progress/${domain}`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                reconnectAttempts = 0;
+                progressArea.querySelector('.connection-status').textContent = '已连接';
+                progressArea.querySelector('.connection-status').className = 'connection-status connected';
+            };
+
+            ws.onmessage = (event) => {
+                const progress = JSON.parse(event.data);
+                updateProgress(progressArea, progress);
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket错误:', error);
+                progressArea.querySelector('.connection-status').textContent = '连接错误';
+                progressArea.querySelector('.connection-status').className = 'connection-status error';
+            };
+
+            ws.onclose = () => {
+                progressArea.querySelector('.connection-status').textContent = '已断开';
+                progressArea.querySelector('.connection-status').className = 'connection-status disconnected';
+                
+                // 尝试重连
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    reconnectAttempts++;
+                    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+                    progressArea.querySelector('.connection-status').textContent = `${delay/1000}秒后重连...`;
+                    reconnectTimer = setTimeout(() => connectWebSocket(progressArea), delay);
+                } else {
+                    progressArea.querySelector('.connection-status').textContent = '重连失败，请刷新页面';
+                }
+            };
+
+            return ws;
+        };
+
+        const updateProgress = (progressArea, progress) => {
+            // 更新总进度
+            const progressFill = progressArea.querySelector('.progress-fill');
+            const progressText = progressArea.querySelector('.progress-text');
+            progressFill.style.width = `${progress.overall_progress}%`;
+            progressText.textContent = `${progress.overall_progress}%`;
+
+            // 更新统计信息
+            const stats = progress.stats;
+            Object.keys(stats).forEach(key => {
+                const element = progressArea.querySelector(`.${key}-tasks`);
+                if (element) {
+                    element.textContent = stats[key];
+                    // 添加动画效果
+                    element.classList.add('updated');
+                    setTimeout(() => element.classList.remove('updated'), 300);
+                }
+            });
+
+            // 更新速度和预计剩余时间
+            if (progress.speed) {
+                progressArea.querySelector('.download-speed').textContent = 
+                    `${utils.formatFileSize(progress.speed)}/s`;
+            }
+            if (progress.eta) {
+                progressArea.querySelector('.eta').textContent = 
+                    `预计剩余: ${utils.formatDuration(progress.eta)}`;
+            }
+
+            // 更新当前任务列表
+            const taskList = progressArea.querySelector('.task-list');
+            const taskItems = progress.current_tasks.map(task => `
+                <div class="task-item ${task.status}">
+                    <div class="task-header">
+                        <div class="task-url" title="${utils.escapeHtml(task.url)}">
+                            ${utils.escapeHtml(utils.truncateUrl(task.url, 60))}
+                        </div>
+                        <div class="task-status">${task.status}</div>
+                    </div>
+                    <div class="task-progress">
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${task.progress}%"></div>
+                        </div>
+                        <div class="progress-stats">
+                            <span class="progress-text">
+                                ${utils.formatFileSize(task.downloaded)} / ${utils.formatFileSize(task.size)}
+                            </span>
+                            <span class="progress-percentage">${task.progress}%</span>
+                        </div>
+                    </div>
+                    ${task.error ? `<div class="task-error">${utils.escapeHtml(task.error)}</div>` : ''}
+                </div>
+            `).join('');
+
+            // 使用DOM diffing来更新任务列表，避免闪烁
+            if (taskList.innerHTML !== taskItems) {
+                taskList.innerHTML = taskItems;
+            }
+
+            // 更新日志
+            if (progress.logs && progress.logs.length > 0) {
+                const logContent = progressArea.querySelector('.log-content');
+                progress.logs.forEach(log => {
+                    const logEntry = document.createElement('div');
+                    logEntry.className = `log-entry ${log.level}`;
+                    logEntry.innerHTML = `
+                        <span class="log-time">${log.time}</span>
+                        <span class="log-message">${utils.escapeHtml(log.message)}</span>
+                    `;
+                    logContent.appendChild(logEntry);
+                    
+                    // 保持最新的日志可见
+                    if (logContent.scrollHeight - logContent.scrollTop < logContent.clientHeight + 100) {
+                        logContent.scrollTop = logContent.scrollHeight;
+                    }
+                });
+
+                // 限制日志条数
+                while (logContent.children.length > 1000) {
+                    logContent.removeChild(logContent.firstChild);
+                }
+            }
+        };
+
         try {
-            // 先获取当前站点信息和镜像状态
             const site = await api.getSite(domain);
             const mirrorStatus = await api.getMirrorStatus(domain);
             const modal = document.createElement('div');
             modal.className = 'modal';
             
-            // 如果已经存在镜像，显示镜像信息
             if (mirrorStatus.exists) {
                 modal.innerHTML = `
                     <div class="modal-content">
@@ -418,7 +546,6 @@ const SitesModule = {
                     </div>
                 `;
             } else {
-                // 显示新建镜像表单
                 modal.innerHTML = `
                     <div class="modal-content">
                         <div class="modal-header">
@@ -470,25 +597,56 @@ const SitesModule = {
                                     <button type="submit" class="btn">开始镜像</button>
                                 </div>
                             </form>
+                            <div id="mirrorProgress" class="mirror-progress" style="display: none;">
+                                <div class="progress-header">
+                                    <h4>镜像进度</h4>
+                                    <div class="connection-status">正在连接...</div>
+                                </div>
+                                <div class="progress-stats">
+                                    <div class="download-speed">- KB/s</div>
+                                    <div class="eta">预计剩余: 计算中...</div>
+                                </div>
+                                <div class="progress-info">
+                                    <div class="progress-bar">
+                                        <div class="progress-fill"></div>
+                                    </div>
+                                    <div class="progress-text">0%</div>
+                                </div>
+                                <div class="task-stats">
+                                    <div class="stat-item">
+                                        <label>总任务数</label>
+                                        <span class="total-tasks">0</span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <label>已完成</label>
+                                        <span class="completed-tasks">0</span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <label>下载中</label>
+                                        <span class="downloading-tasks">0</span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <label>失败</label>
+                                        <span class="failed-tasks">0</span>
+                                    </div>
+                                </div>
+                                <div class="current-tasks">
+                                    <h5>当前下载任务</h5>
+                                    <div class="task-list"></div>
+                                </div>
+                                <div class="mirror-logs">
+                                    <h5>镜像日志</h5>
+                                    <div class="log-content"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 `;
-            }
 
-            document.body.appendChild(modal);
+                document.body.appendChild(modal);
 
-            // 如果是新建镜像表单，绑定表单事件
-            if (!mirrorStatus.exists) {
+                // 绑定表单事件
                 const form = modal.querySelector('#mirrorForm');
-                const tdkCheckbox = modal.querySelector('input[name="tdk"]');
-                const tdkRulesGroup = modal.querySelector('.tdk-rules');
-
-                if (tdkCheckbox && tdkRulesGroup) {
-                    tdkCheckbox.addEventListener('change', () => {
-                        tdkRulesGroup.style.display = tdkCheckbox.checked ? 'block' : 'none';
-                    });
-                }
-
                 if (form) {
                     form.addEventListener('submit', async (e) => {
                         e.preventDefault();
@@ -508,13 +666,73 @@ const SitesModule = {
                                 tdk_rules: formData.get('tdk_rules') ? JSON.parse(formData.get('tdk_rules')) : null
                             };
 
-                            await api.mirrorSite(data);
-                            app.showSuccess('镜像配置成功');
-                            modal.remove();
-                            await this.loadSitesList(app);
+                            // 显示进度区域
+                            form.style.display = 'none';
+                            const progressArea = modal.querySelector('#mirrorProgress');
+                            progressArea.style.display = 'block';
+
+                            // 开始镜像并监听进度
+                            const progressFill = progressArea.querySelector('.progress-fill');
+                            const progressText = progressArea.querySelector('.progress-text');
+                            const taskList = progressArea.querySelector('.task-list');
+                            const logContent = progressArea.querySelector('.log-content');
+
+                            // 启动WebSocket连接监听进度
+                            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                            const ws = new WebSocket(`${wsProtocol}//${api.baseURL.split('/api/')[0]}/api/v1/nginx/mirror/progress/${domain}`);
+
+                            ws.onmessage = (event) => {
+                                const progress = JSON.parse(event.data);
+                                
+                                // 更新总进度
+                                progressFill.style.width = `${progress.overall_progress}%`;
+                                progressText.textContent = `${progress.overall_progress}%`;
+
+                                // 更新统计信息
+                                const stats = progress.stats;
+                                progressArea.querySelector('.total-tasks').textContent = stats.total;
+                                progressArea.querySelector('.completed-tasks').textContent = stats.completed;
+                                progressArea.querySelector('.downloading-tasks').textContent = stats.downloading;
+                                progressArea.querySelector('.failed-tasks').textContent = stats.failed;
+
+                                // 更新当前任务列表
+                                taskList.innerHTML = progress.current_tasks.map(task => `
+                                    <div class="task-item">
+                                        <div class="task-url">${utils.escapeHtml(task.url)}</div>
+                                        <div class="task-progress">
+                                            <div class="progress-bar">
+                                                <div class="progress-fill" style="width: ${task.progress}%"></div>
+                                            </div>
+                                            <div class="progress-text">
+                                                ${utils.formatFileSize(task.downloaded)} / ${utils.formatFileSize(task.size)}
+                                            </div>
+                                        </div>
+                                    </div>
+                                `).join('');
+
+                                // 添加日志
+                                if (progress.logs && progress.logs.length > 0) {
+                                    progress.logs.forEach(log => {
+                                        const logEntry = document.createElement('div');
+                                        logEntry.className = `log-entry ${log.level}`;
+                                        logEntry.innerHTML = `
+                                            <span class="log-time">${log.time}</span>
+                                            <span class="log-message">${utils.escapeHtml(log.message)}</span>
+                                        `;
+                                        logContent.appendChild(logEntry);
+                                        logContent.scrollTop = logContent.scrollHeight;
+                                    });
+                                }
+                            };
+
+                            // 开始镜像
+                            const response = await api.mirrorSite(data);
+                            if (!response.success) {
+                                throw new Error(response.message);
+                            }
+
                         } catch (error) {
                             app.showError(error.message);
-                        } finally {
                             submitBtn.disabled = false;
                             submitBtn.textContent = '开始镜像';
                         }
@@ -553,7 +771,7 @@ const SitesModule = {
     },
 
     async deleteMirror(domain) {
-        if (!confirm('确定要删除镜像站点吗？此操作不可恢复！')) {
+        if (!confirm('确定要删除��像站点吗？此操作不可恢复！')) {
             return;
         }
         

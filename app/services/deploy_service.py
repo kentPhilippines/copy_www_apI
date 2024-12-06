@@ -24,6 +24,7 @@ from app.schemas.deploy import (
 )
 from app.services.nginx_service import NginxService
 from app.services.ssl_service import SSLService
+from app.utils.download_manager import DownloadManager
 
 logger = setup_logger(__name__)
 
@@ -34,6 +35,7 @@ class DeployService:
         self.nginx_service = NginxService()
         self.ssl_service = SSLService()
         self.logger = logger
+        self.download_manager = DownloadManager()
 
     async def get_site_info(self, domain: str) -> Optional[NginxSiteInfo]:
         """获取单个站点的详细信息"""
@@ -772,7 +774,7 @@ app.listen(port, () => {{
                                 os.path.dirname(page_path)
                             )
 
-            # 6. 保存处理后���页面
+            # 6. 保存处理后页面
             with open(page_path, 'w', encoding='utf-8') as f:
                 f.write(str(soup))
             downloaded_urls.add(url)
@@ -798,50 +800,22 @@ app.listen(port, () => {{
                 self.logger.debug(f"资源已下载: {src}")
                 return True
 
-            # 2. 检查本地文件
+            # 2. 准备保存路径
             file_path = urlparse(src).path.lstrip('/') or f"{urlparse(src).netloc.replace('.', '_')}.html"
             local_path = os.path.join(target_path, file_path)
-            
-            # 如果URL以/结尾，说明是目录
-            if src.endswith('/'):
-                if not os.path.exists(local_path):
-                    os.makedirs(local_path, exist_ok=True)
-                    await run_command(f"chown nginx:nginx {local_path}")
-                downloaded_urls.add(src)
-                self.logger.debug(f"创建目录: {local_path}")
-                return True
-            
-            if os.path.exists(local_path):
-                if os.path.isdir(local_path):
-                    self.logger.debug(f"跳过目录: {local_path}")
-                    downloaded_urls.add(src)
-                    return True
-                self.logger.debug(f"资源已存在: {local_path}")
-                downloaded_urls.add(src)
-                return True
 
-            # 3. 下载文件
-            response = requests.get(src, verify=False, timeout=10)
-            if not response.ok:
-                return False
-
-            # 4. 保存文件
-            try:
-                os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                with open(local_path, 'wb') as f:
-                    f.write(response.content)
-                await run_command(f"chown nginx:nginx {local_path}")
-                
-                downloaded_urls.add(src)
-                self.logger.debug(f"下载成功: {src} -> {local_path}")
-                return True
-            except IsADirectoryError:
-                self.logger.debug(f"跳过目录: {local_path}")
-                downloaded_urls.add(src)
-                return True
+            # 3. 添加下载任务
+            task = await self.download_manager.add_task(
+                domain=urlparse(base_url).netloc,
+                url=src,
+                target_path=local_path
+            )
+            # 4. 标记为已处理
+            downloaded_urls.add(src)
+            return True
 
         except Exception as e:
-            self.logger.error(f"下载失败: {src} - {str(e)}")
+            self.logger.error(f"添加下载任务失败: {src} - {str(e)}")
             return False
 
     async def get_mirror_status(self, domain: str) -> MirrorStatus:
