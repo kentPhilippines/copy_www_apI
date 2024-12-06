@@ -849,7 +849,7 @@ class App {
                                     <input type="text" name="target_path" required 
                                         value="${site.root_path}" 
                                         readonly
-                                        title="使用当前站点根目录">
+                                        title="使用当前��点根目录">
                                     <div class="hint">镜像内容将存放在当前站点根目录</div>
                                 </div>
                                 <div class="form-group">
@@ -888,50 +888,63 @@ class App {
             }
 
             document.body.appendChild(modal);
-            
-            // TDK选项切换
-            const tdkCheckbox = modal.querySelector('input[name="tdk"]');
-            const tdkRulesGroup = modal.querySelector('.tdk-rules');
-            tdkCheckbox.addEventListener('change', () => {
-                tdkRulesGroup.style.display = tdkCheckbox.checked ? 'block' : 'none';
-            });
 
-            // 表单提交
-            const form = modal.querySelector('#mirrorForm');
-            form.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const submitBtn = form.querySelector('button[type="submit"]');
-                submitBtn.disabled = true;
-                submitBtn.textContent = '处理中...';
+            // 如果是新建镜像表单，绑定表单事件
+            if (!mirrorStatus.exists) {
+                const form = modal.querySelector('#mirrorForm');
+                const tdkCheckbox = modal.querySelector('input[name="tdk"]');
+                const tdkRulesGroup = modal.querySelector('.tdk-rules');
 
-                try {
-                    const formData = new FormData(form);
-                    const data = {
-                        domain: domain,
-                        target_domain: formData.get('target_domain'),
-                        target_path: formData.get('target_path'),
-                        overwrite: formData.get('overwrite') === 'on',
-                        sitemap: formData.get('sitemap') === 'on',
-                        tdk: formData.get('tdk') === 'on',
-                        tdk_rules: formData.get('tdk') ? JSON.parse(formData.get('tdk_rules')) : null
-                    };
-
-                    await api.mirrorSite(data);
-                    this.showSuccess('镜像配置成功');
-                    modal.remove();
-                } catch (error) {
-                    this.showError(error.message);
-                } finally {
-                    submitBtn.disabled = false;
-                    submitBtn.textContent = '开始镜像';
+                if (tdkCheckbox && tdkRulesGroup) {
+                    tdkCheckbox.addEventListener('change', () => {
+                        tdkRulesGroup.style.display = tdkCheckbox.checked ? 'block' : 'none';
+                    });
                 }
-            });
+
+                if (form) {
+                    form.addEventListener('submit', async (e) => {
+                        e.preventDefault();
+                        const submitBtn = form.querySelector('button[type="submit"]');
+                        submitBtn.disabled = true;
+                        submitBtn.textContent = '处理中...';
+
+                        try {
+                            const formData = new FormData(form);
+                            const data = {
+                                domain: domain,
+                                target_domain: formData.get('target_domain'),
+                                target_path: formData.get('target_path'),
+                                overwrite: formData.get('overwrite') === 'on',
+                                sitemap: formData.get('sitemap') === 'on',
+                                tdk: formData.get('tdk') === 'on',
+                                tdk_rules: formData.get('tdk') ? JSON.parse(formData.get('tdk_rules')) : null
+                            };
+
+                            await api.mirrorSite(data);
+                            this.showSuccess('镜像配置成功');
+                            modal.remove();
+                            await this.loadSitesList();  // 刷新站点列表
+                        } catch (error) {
+                            this.showError(error.message);
+                        } finally {
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = '开始镜像';
+                        }
+                    });
+                }
+            }
 
             // 关闭按钮事件
-            modal.querySelector('.close-btn').onclick = () => modal.remove();
+            const closeBtn = modal.querySelector('.close-btn');
+            if (closeBtn) {
+                closeBtn.onclick = () => modal.remove();
+            }
+
+            // 点击背景关闭
             modal.onclick = (e) => {
                 if (e.target === modal) modal.remove();
             };
+
         } catch (error) {
             this.showError(`加载镜像配置失败: ${error.message}`);
         }
