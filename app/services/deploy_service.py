@@ -599,7 +599,7 @@ class DeployService:
 
     async def _create_node_page(self, site_root: str, domain: str):
         """创建Node.js测试页面"""
-        # 创建package.json
+        # 创package.json
         package_json = {
             "name": domain.replace(".", "-"),
             "version": "1.0.0",
@@ -716,7 +716,7 @@ app.listen(port, () => {{
                 add_log(f"创建目录失败: {str(e)}", 'error')
                 return MirrorResponse(
                     success=False,
-                    message=f"��建目录失败: {str(e)}",
+                    message=f"创建目录失败: {str(e)}",
                     logs=mirror_log
                 )
 
@@ -794,7 +794,7 @@ app.listen(port, () => {{
                 
                 return MirrorResponse(
                     success=True,
-                    message=f"站点镜像成功: 下载成功 {downloaded} 个文件, 失败 {failed} 个文���",
+                    message=f"站点镜像成功: 下载成功 {downloaded} 个文件, 失败 {failed} 个文件",
                     data={
                         "target_path": request.target_path,
                         "files_count": downloaded,
@@ -953,7 +953,7 @@ app.listen(port, () => {{
                 raise ValueError(f"站点 {domain} 未配置镜像")
 
             try:
-                # 删除所有文件，但保留目���
+                # 删除所有文件，但保留目
                 for item in os.listdir(site.root_path):
                     item_path = os.path.join(site.root_path, item)
                     if os.path.isfile(item_path):
@@ -961,7 +961,7 @@ app.listen(port, () => {{
                     elif os.path.isdir(item_path):
                         shutil.rmtree(item_path)
 
-                # 删除镜像配置文件
+                # 删除镜像配置文��
                 os.remove(mirror_config_file)
 
                 # 创建默认的 index.html
@@ -1085,3 +1085,61 @@ app.listen(port, () => {{
             
         except Exception as e:
             add_log(f"处理链接失败: {url}, 错误: {str(e)}", 'error')
+
+    async def _download_resource(self, src: str, base_url: str, target_path: str, downloaded_urls: set) -> bool:
+        """下载单个资源文件
+        
+        Args:
+            src: 资源URL
+            base_url: 基础URL
+            target_path: 目标保存路径
+            downloaded_urls: 已下载URL集合
+        
+        Returns:
+            bool: 下载是否成功
+        """
+        try:
+            # 处理相对路径
+            if src.startswith('//'):
+                src = f'https:{src}'
+            elif src.startswith('/'):
+                src = f"{base_url.split('//', 1)[0]}//{urlparse(base_url).netloc}{src}"
+            elif not src.startswith(('http://', 'https://')):
+                src = urljoin(base_url, src)
+            
+            # 如果已经下载过，直接返回成功
+            if src in downloaded_urls:
+                return True
+            
+            # 下载资源
+            response = requests.get(src, verify=False, timeout=10)
+            if not response.ok:
+                self.logger.warning(f"下载资源失败: {src}, 状态码: {response.status_code}")
+                return False
+            
+            # 解析文件路径
+            parsed_url = urlparse(src)
+            file_path = parsed_url.path.lstrip('/')
+            if not file_path:
+                # 如果没有路径，使用URL的最后部分作为文件名
+                file_path = parsed_url.netloc.replace('.', '_') + '.html'
+            
+            # 构建本地保存路径
+            local_path = os.path.join(target_path, file_path)
+            
+            # 确保目录存在
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            
+            # 保存文件
+            with open(local_path, 'wb') as f:
+                f.write(response.content)
+            
+            # 添加到已下载集合
+            downloaded_urls.add(src)
+            
+            self.logger.debug(f"下载资源成功: {src} -> {local_path}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"下载资源出错: {src} - {str(e)}")
+            return False
