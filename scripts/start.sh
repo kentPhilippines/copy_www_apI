@@ -127,7 +127,7 @@ start_api() {
     mkdir -p logs
     
     # 启动服务 - 使用更好的后台运行方式
-    nohup python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload > logs/api.log 2>&1 &
+      python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload  
     
     # 保存PID
     echo $! > .api.pid
