@@ -2,69 +2,137 @@ from typing import Optional, Dict, Any
 from app.utils.shell import run_command
 from app.core.logger import setup_logger
 import os
+import asyncio
+import aiohttp
+import aiodns
 
 logger = setup_logger(__name__)
 
 class SSLService:
     """SSL证书服务"""
 
-    async def create_certificate(self, domain: str, email: Optional[str] = None) -> Dict[str, Any]:
-        """
-        申请SSL证书
-        
-        Args:
-            domain: 域名
-            email: 邮箱地址（可选）
-        """
+    def __init__(self):
+        self.logger = setup_logger(__name__)
+
+    async def create_certificate(self, domain: str, email: str) -> Dict[str, Any]:
+        """申请SSL证书"""
         try:
-            # 确保验证目录存在
-            webroot_path = f"/var/www/{domain}"
-            os.makedirs(f"{webroot_path}/.well-known/acme-challenge", exist_ok=True)
-            
-            # 设置正确的权限
-            await run_command(f"chmod -R 755 {webroot_path}/.well-known")
-            await run_command(f"chown -R nginx:nginx {webroot_path}/.well-known")
+            # 检查域名DNS解析
+            if not await self._check_dns(domain):
+                return {
+                    "success": False,
+                    "message": f"域名 {domain} DNS未解析到当前服务器"
+                }
 
-            # 准备certbot命令
-            cmd_parts = [
-                "certbot certonly",
-                "--webroot",
-                f"-w {webroot_path}",  # 使用站点自己的目录
-                f"-d {domain}",
-                "--non-interactive",
-                "--agree-tos",
-                "--preferred-challenges http-01"
-            ]
+            # 确保目录存在
+            cert_dir = f"/etc/letsencrypt/live/{domain}"
+            os.makedirs(cert_dir, exist_ok=True)
 
-            # 添加邮箱或使用--register-unsafely-without-email
-            if email:
-                cmd_parts.append(f"--email {email}")
-            else:
-                cmd_parts.append("--register-unsafely-without-email")
+            # 构建certbot命令
+            cmd = (
+                f"certbot certonly --standalone "
+                f"--non-interactive "
+                f"--agree-tos "
+                f"--email {email} "
+                f"--domain {domain} "
+                f"--preferred-challenges http "
+                f"--http-01-port 80 "
+                "--force-renewal "
+                "--debug-challenges"
+            )
 
-            # 执行命令
-            cmd = " ".join(cmd_parts)
-            logger.info(f"执行certbot命令: {cmd}")
-            
-            await run_command(cmd)
+            # 临时停止Nginx
+            await run_command("systemctl stop nginx")
+            self.logger.info("Nginx服务已停止，准备申请证书")
 
-            # 验证证书文件是否存在
-            cert_path = f"/etc/letsencrypt/live/{domain}/fullchain.pem"
-            key_path = f"/etc/letsencrypt/live/{domain}/privkey.pem"
-            
-            if not (os.path.exists(cert_path) and os.path.exists(key_path)):
-                raise Exception("证书文件未创建")
+            try:
+                # 执行certbot命令
+                process = await asyncio.create_subprocess_shell(
+                    cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await process.communicate()
 
-            return {
-                "success": True,
-                "domain": domain,
-                "cert_path": cert_path,
-                "key_path": key_path
-            }
-            
+                # 记录详细日志
+                if stdout:
+                    self.logger.info(f"Certbot输出: {stdout.decode()}")
+                if stderr:
+                    self.logger.warning(f"Certbot错误: {stderr.decode()}")
+
+                if process.returncode != 0:
+                    raise Exception(f"Certbot命令执行失败: {stderr.decode()}")
+
+                # 检查证书文件是否存在
+                cert_path = f"/etc/letsencrypt/live/{domain}/fullchain.pem"
+                key_path = f"/etc/letsencrypt/live/{domain}/privkey.pem"
+
+                if not (os.path.exists(cert_path) and os.path.exists(key_path)):
+                    raise Exception("证书文件未生成")
+
+                return {
+                    "success": True,
+                    "message": "SSL证书申请成功",
+                    "cert_path": cert_path,
+                    "key_path": key_path
+                }
+
+            finally:
+                # 重新启动Nginx
+                try:
+                    await run_command("systemctl start nginx")
+                    self.logger.info("Nginx服务已重新启动")
+                except Exception as e:
+                    self.logger.error(f"重启Nginx失败: {str(e)}")
+
         except Exception as e:
-            logger.error(f"SSL证书申请失败: {str(e)}")
-            raise
+            self.logger.error(f"SSL证书申请失败: {str(e)}")
+            return {
+                "success": False,
+                "message": f"SSL证书申请失败: {str(e)}"
+            }
+
+    async def _check_dns(self, domain: str) -> bool:
+        """检查域名DNS解析"""
+        try:
+            # 获取当前服务器IP
+            server_ip = await self._get_server_ip()
+            if not server_ip:
+                self.logger.error("无法获取服务器IP")
+                return False
+
+            # 获取域名解析IP
+            domain_ip = await self._get_domain_ip(domain)
+            if not domain_ip:
+                self.logger.error(f"无法获取域名 {domain} 的解析IP")
+                return False
+
+            # 比较IP
+            return server_ip == domain_ip
+
+        except Exception as e:
+            self.logger.error(f"检查DNS解析失败: {str(e)}")
+            return False
+
+    async def _get_server_ip(self) -> Optional[str]:
+        """获取服务器公网IP"""
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get('https://api.ipify.org') as response:
+                    return await response.text()
+        except Exception as e:
+            self.logger.error(f"获取服务器IP失败: {str(e)}")
+            return None
+
+    async def _get_domain_ip(self, domain: str) -> Optional[str]:
+        """获取域名解析IP"""
+        try:
+            resolver = aiodns.DNSResolver()
+            result = await resolver.query(domain, 'A')
+            return result[0].host if result else None
+        except Exception as e:
+            self.logger.error(f"获取域名IP失败: {str(e)}")
+            return None
 
     async def delete_certificate(self, domain: str) -> Dict[str, Any]:
         """删除SSL证书"""

@@ -251,7 +251,10 @@ server {
         add_header Cache-Control "public";
         try_files $uri $uri/ =404;
     }
-    
+    #提供ssl申请验证
+    location ~ /.well-known {
+        allow all;
+    }
     # 默认location配置
     location / {
         try_files $uri $uri/ /index.html;
