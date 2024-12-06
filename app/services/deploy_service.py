@@ -174,7 +174,10 @@ class DeployService:
                             nginx_site.ssl_enabled = True
                             nginx_site.ssl_certificate = ssl_result["cert_path"]
                             nginx_site.ssl_certificate_key = ssl_result["key_path"]
-                            
+                            nginx_site.ssl_info = SSLInfo(
+                                cert_path=ssl_result["cert_path"],
+                                key_path=ssl_result["key_path"]
+                            )
                             # 重新生成配置并重载Nginx
                             await self.nginx_service.create_site(nginx_site)
                         else:
