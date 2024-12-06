@@ -1,15 +1,20 @@
 import asyncio
-from app.core.database import init_db
+from app.db.base import Base, engine
+from app.models.download import DownloadTask
 from app.core.logger import setup_logger
+import os
+from app.core.config import settings
 
 logger = setup_logger(__name__)
 
 async def initialize_database():
-    """异步初始化数据库"""
+    """初始化数据库"""
     try:
-        # 在事件循环中执行同步的数据库初始化
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, init_db)
+        # 确保数据目录存在
+        os.makedirs(os.path.dirname(settings.DATABASE_URL.replace('sqlite:///', '')), exist_ok=True)
+        
+        # 创建所有表
+        Base.metadata.create_all(bind=engine)
         logger.info("数据库初始化完成")
     except Exception as e:
         logger.error(f"数据库初始化失败: {str(e)}")

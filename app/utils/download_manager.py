@@ -32,20 +32,26 @@ class DownloadManager:
 
     async def add_task(self, domain: str, url: str, target_path: str, depth: int = 0) -> DownloadTask:
         """添加下载任务"""
-        task = DownloadTask(
-            domain=domain,
-            source_url=url,
-            target_path=target_path,
-            status="pending",
-            depth=depth
-        )
-        self.db.add(task)
-        self.db.commit()
-        self.db.refresh(task)
-        
-        # 异步启动下载
-        asyncio.create_task(self.process_task(task))
-        return task
+        try:
+            task = DownloadTask(
+                domain=domain,
+                source_url=url,
+                target_path=target_path,
+                status="pending",
+                depth=depth
+            )
+            self.db.add(task)
+            self.db.commit()
+            self.db.refresh(task)
+            
+            # 异步启动下载
+            asyncio.create_task(self.process_task(task))
+            return task
+            
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"添加下载任务失败: {str(e)}")
+            raise
 
     async def process_task(self, task: DownloadTask):
         """处理下载任务"""
@@ -76,7 +82,7 @@ class DownloadManager:
                         # 创建目录
                         os.makedirs(os.path.dirname(task.target_path), exist_ok=True)
 
-                        # 保存文件，同时更新进度
+                        # 保存文件，同���更新进度
                         downloaded_size = 0
                         with open(task.target_path, 'wb') as f:
                             async for chunk in response.content.iter_chunked(8192):

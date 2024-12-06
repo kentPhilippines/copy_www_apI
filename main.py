@@ -30,6 +30,11 @@ app.include_router(sites.router, prefix=f"{settings.API_V1_STR}/sites", tags=["�
 @app.on_event("startup")
 async def startup_event():
     """应用启动时的初始化"""
+    # 初始化数据库
+    from app.core.init_db import initialize_database
+    await initialize_database()
+    
+    # 启动下载管理器
     from app.api.v1.endpoints.deploy import deploy_service
     await deploy_service.start()
 

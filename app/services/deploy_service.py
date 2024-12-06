@@ -36,13 +36,23 @@ class DeployService:
         self.nginx_service = NginxService()
         self.ssl_service = SSLService()
         self.logger = logger
-        self.db = SessionLocal()
-        self.download_manager = DownloadManager(db=self.db)
+        
+        try:
+            # 获取数据库会话
+            self.db = SessionLocal()
+            self.download_manager = DownloadManager(db=self.db)
+            self.logger.info("下载管理器初始化成功")
+        except Exception as e:
+            self.logger.error(f"下载管理器初始化失败: {str(e)}")
+            raise
 
     def __del__(self):
         """析构函数，确保关闭数据库连接"""
-        if hasattr(self, 'db'):
-            self.db.close()
+        try:
+            if hasattr(self, 'db'):
+                self.db.close()
+        except Exception as e:
+            self.logger.error(f"关闭数据库连接失败: {str(e)}")
 
     async def start(self):
         """启动服务"""
