@@ -20,10 +20,12 @@ class DownloadManager:
         self.downloaded_urls: Set[str] = set()
         self.progress_callbacks = {}
         self.retry_delays = [5, 15, 30]  # 重试延迟时间（秒）
+        self.loop = asyncio.get_event_loop()
 
     async def start(self):
         """启动下载管理器"""
         self.session = aiohttp.ClientSession()
+        self.loop = asyncio.get_event_loop()
 
     async def stop(self):
         """停止下载管理器"""
@@ -44,8 +46,8 @@ class DownloadManager:
             self.db.commit()
             self.db.refresh(task)
             
-            # 异步启动下载
-            asyncio.create_task(self.process_task(task))
+            # 使用 ensure_future 替代 create_task
+            asyncio.ensure_future(self.process_task(task), loop=self.loop)
             return task
             
         except Exception as e:
@@ -82,7 +84,7 @@ class DownloadManager:
                         # 创建目录
                         os.makedirs(os.path.dirname(task.target_path), exist_ok=True)
 
-                        # 保存文件，同���更新进度
+                        # 保存文件，同更新进度
                         downloaded_size = 0
                         with open(task.target_path, 'wb') as f:
                             async for chunk in response.content.iter_chunked(8192):
@@ -155,7 +157,8 @@ class DownloadManager:
             task.error = None
             task.retries = 0
             self.db.commit()
-            asyncio.create_task(self.process_task(task))
+            # 使用 ensure_future
+            asyncio.ensure_future(self.process_task(task), loop=self.loop)
 
     async def cancel_tasks(self, domain: str):
         """取消指定域名的所有任务"""
