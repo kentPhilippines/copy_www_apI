@@ -494,7 +494,7 @@ class DeployService:
         <h1>{domain}</h1>
         
         <div class="info-section">
-            <h2>���础信息</h2>
+            <h2>础信息</h2>
             <div class="info-grid">
                 <div class="info-item">
                     <strong>部署状态</strong>
@@ -818,30 +818,91 @@ app.listen(port, () => {{
             self.logger.error(f"下载失败: {src} - {str(e)}")
             return False
 
-
-    async def get_mirror_status(self, domain: str):
+    async def get_mirror_status(self, domain: str) -> MirrorStatus:
         """获取镜像状态"""
-        mirror_config_path = os.path.join(request.target_path, '.mirror-config.json')
-        if os.path.exists(mirror_config_path):
-            with open(mirror_config_path, 'r') as f:
-                return json.load(f)
-        else:
-            return None
-    async def refresh_mirror(self, domain: str):
-        """刷新镜像"""
-        mirror_config_path = os.path.join(request.target_path, '.mirror-config.json')
-        if os.path.exists(mirror_config_path):
-            os.remove(mirror_config_path)
-            # 重新镜像
-            return await self.mirror_site(request)
-        else:
-            return MirrorResponse(success=False, message="镜像不存在")
+        try:
+            # 获取站点信息
+            site = await self.get_site_info(domain)
+            if not site:
+                return MirrorStatus(exists=False, message="站点不存在")
 
-    async def delete_mirror(self, domain: str):
+            # 检查镜像配置文件
+            mirror_config_path = os.path.join(site.root_path, '.mirror-config.json')
+            if not os.path.exists(mirror_config_path):
+                return MirrorStatus(exists=False)
+
+            # 读取配置
+            with open(mirror_config_path, 'r') as f:
+                config = json.load(f)
+                return MirrorStatus(
+                    exists=True,
+                    target_domain=config.get('target_domain'),
+                    mirror_time=config.get('mirror_time'),
+                    files_count=config.get('files_count'),
+                    sitemap=config.get('sitemap', False),
+                    tdk=config.get('tdk', False)
+                )
+
+        except Exception as e:
+            self.logger.error(f"获取镜像状态失败: {str(e)}")
+            return MirrorStatus(exists=False, message=str(e))
+
+    async def refresh_mirror(self, domain: str) -> MirrorResponse:
+        """刷新镜像"""
+        try:
+            # 获取站点信息
+            site = await self.get_site_info(domain)
+            if not site:
+                return MirrorResponse(success=False, message="站点不存在")
+
+            # 检查镜像配置
+            mirror_config_path = os.path.join(site.root_path, '.mirror-config.json')
+            if not os.path.exists(mirror_config_path):
+                return MirrorResponse(success=False, message="镜像不存在")
+
+            # 读取原配置
+            with open(mirror_config_path, 'r') as f:
+                config = json.load(f)
+
+            # 构建刷新请求
+            refresh_request = MirrorRequest(
+                domain=domain,
+                target_domain=config['target_domain'],
+                target_path=site.root_path,
+                overwrite=True,
+                sitemap=config.get('sitemap', False),
+                tdk=config.get('tdk', False),
+                tdk_rules=config.get('tdk_rules')
+            )
+
+            # 重新执行镜像
+            return await self.mirror_site(refresh_request)
+
+        except Exception as e:
+            self.logger.error(f"刷新镜像失败: {str(e)}")
+            return MirrorResponse(success=False, message=str(e))
+
+    async def delete_mirror(self, domain: str) -> MirrorResponse:
         """删除镜像"""
-        mirror_config_path = os.path.join(request.target_path, '.mirror-config.json')
-        if os.path.exists(mirror_config_path):
+        try:
+            # 获取站点信息
+            site = await self.get_site_info(domain)
+            if not site:
+                return MirrorResponse(success=False, message="站点不存在")
+
+            # 检查镜像配置
+            mirror_config_path = os.path.join(site.root_path, '.mirror-config.json')
+            if not os.path.exists(mirror_config_path):
+                return MirrorResponse(success=False, message="镜像不存在")
+
+            # 删除镜像配置
             os.remove(mirror_config_path)
+
+            # 创建默认页面
+            await self._create_static_page(site.root_path, domain)
+
             return MirrorResponse(success=True, message="镜像删除完成")
-        else:
-            return MirrorResponse(success=False, message="镜像不存在")
+
+        except Exception as e:
+            self.logger.error(f"删除镜像失败: {str(e)}")
+            return MirrorResponse(success=False, message=str(e))
