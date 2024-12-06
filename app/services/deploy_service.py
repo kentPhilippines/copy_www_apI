@@ -719,7 +719,7 @@ app.listen(port, () => {{
             add_log(f"镜像失败: {str(e)}", 'error')
             return MirrorResponse(success=False, message=str(e), logs=mirror_log)
 
-    async def _process_link(self, url: str, target_path: str, downloaded_urls: set, add_log, depth=0, max_depth=10):
+    async def _process_link(self, url: str, target_path: str, downloaded_urls: set, add_log, depth=0, max_depth=20):
         """递归处理链接"""
         if depth > max_depth or url in downloaded_urls:
             return
@@ -795,23 +795,31 @@ app.listen(port, () => {{
             elif not src.startswith(('http://', 'https://')): src = urljoin(base_url, src)
             
             if src in downloaded_urls:
+                self.logger.debug(f"资源已下载: {src}")
                 return True
 
-            # 2. 下载文件
+            # 2. 检查本地文件
+            file_path = urlparse(src).path.lstrip('/') or f"{urlparse(src).netloc.replace('.', '_')}.html"
+            local_path = os.path.join(target_path, file_path)
+            
+            if os.path.exists(local_path):
+                self.logger.debug(f"资源已存在: {local_path}")
+                downloaded_urls.add(src)
+                return True
+
+            # 3. 下载文件
             response = requests.get(src, verify=False, timeout=10)
             if not response.ok:
                 return False
 
-            # 3. 保存文件
-            file_path = urlparse(src).path.lstrip('/') or f"{urlparse(src).netloc.replace('.', '_')}.html"
-            local_path = os.path.join(target_path, file_path)
+            # 4. 保存文件
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
-            
             with open(local_path, 'wb') as f:
                 f.write(response.content)
             await run_command(f"chown nginx:nginx {local_path}")
             
             downloaded_urls.add(src)
+            self.logger.debug(f"下载成功: {src} -> {local_path}")
             return True
 
         except Exception as e:
