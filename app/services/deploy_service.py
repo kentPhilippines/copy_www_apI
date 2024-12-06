@@ -731,6 +731,7 @@ app.listen(port, () => {{
                 # 保存目标站点内容
                 with open(os.path.join(request.target_path, 'index.html'), 'wb') as f:
                     f.write(response.content)
+                add_log(f"保存目标站点内容: {len(response.content)} 字节")
 
                 # 5. 解析HTML
                 soup = BeautifulSoup(response.content, 'html.parser')
