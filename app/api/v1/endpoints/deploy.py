@@ -9,7 +9,8 @@ from app.schemas.deploy import (
     SiteListResponse,
     MirrorRequest,
     MirrorResponse,
-    LogResponse
+    LogResponse,
+    MirrorStatus
 )
 from app.schemas.nginx import NginxSiteInfo
 
@@ -89,5 +90,29 @@ async def mirror_site_sitemap(request: MirrorRequest):
     """镜像站点蜘蛛地图"""
     try:
         return await deploy_service.mirror_site_sitemap(request)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/sites/{domain}/mirror", response_model=MirrorStatus)
+async def get_mirror_status(domain: str):
+    """获取站点镜像状态"""
+    try:
+        return await deploy_service.get_mirror_status(domain)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/sites/{domain}/mirror/refresh", response_model=MirrorResponse)
+async def refresh_mirror(domain: str):
+    """刷新站点镜像"""
+    try:
+        return await deploy_service.refresh_mirror(domain)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.delete("/sites/{domain}/mirror", response_model=MirrorResponse)
+async def delete_mirror(domain: str):
+    """删除站点镜像"""
+    try:
+        return await deploy_service.delete_mirror(domain)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

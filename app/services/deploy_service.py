@@ -713,6 +713,61 @@ app.listen(port, () => {{
                 # 6. 解析HTML
                 soup = BeautifulSoup(response.content, 'html.parser')
                 
+                # 创建已下载URL集合，避免重复下载
+                downloaded_urls = set()
+                
+                # 获取所有可点击元素的链接
+                clickable_elements = soup.find_all(['a', 'button', 'input[type="submit"]', 
+                    'input[type="button"]', '[onclick]', '[href]', '[role="button"]'])
+                
+                for element in clickable_elements:
+                    href = element.get('href')
+                    onclick = element.get('onclick')
+                    
+                    if href:
+                        # 处理href链接
+                        if href.startswith('#'):
+                            continue  # 跳过页内锚点
+                        if href.startswith('javascript:'):
+                            continue  # 跳过JavaScript代码
+                            
+                        full_url = urljoin(target_url, href)
+                        if full_url.startswith(target_url) and full_url not in downloaded_urls:
+                            try:
+                                # 下载页面内容
+                                page_response = requests.get(full_url, verify=False, timeout=30)
+                                if page_response.ok:
+                                    # 解析相对路径
+                                    path = urlparse(full_url).path.lstrip('/')
+                                    if not path:
+                                        path = 'index.html'
+                                    elif not path.endswith(('.html', '.htm')):
+                                        path = f"{path}/index.html"
+                                        
+                                    # 保存页面
+                                    page_path = os.path.join(request.target_path, path)
+                                    os.makedirs(os.path.dirname(page_path), exist_ok=True)
+                                    
+                                    # 解析页面内容
+                                    page_soup = BeautifulSoup(page_response.content, 'html.parser')
+                                    
+                                    # 处理TDK
+                                    if request.tdk and request.tdk_rules:
+                                        self._update_tdk(page_soup, request.tdk_rules)
+                                    
+                                    # 保存页面
+                                    with open(page_path, 'w', encoding='utf-8') as f:
+                                        f.write(str(page_soup))
+                                    
+                                    downloaded_urls.add(full_url)
+                                    self.logger.debug(f"下载页面成功: {full_url}")
+                                    
+                                    # 递归处理页面中的资源
+                                    await self._process_page_resources(page_soup, target_url, request.target_path, downloaded_urls)
+                                    
+                            except Exception as e:
+                                self.logger.warning(f"下载页面失败 {full_url}: {str(e)}")
+
                 # 7. TDK替换
                 if request.tdk and request.tdk_rules:
                     try:
@@ -813,3 +868,31 @@ app.listen(port, () => {{
                 f.write(f'    <loc>{url}</loc>\n')
                 f.write(f'  </url>\n')
             f.write('</urlset>\n')
+
+    async def _process_page_resources(self, soup: BeautifulSoup, base_url: str, target_path: str, downloaded_urls: set):
+        """处理页面中的资源文件"""
+        # 处理所有资源标签
+        for tag in soup.find_all(['link', 'script', 'img', 'video', 'audio', 'source', 'iframe']):
+            src = tag.get('src') or tag.get('href') or tag.get('data-src')
+            if src:
+                try:
+                    if src.startswith('//'):
+                        src = f'https:{src}'
+                    elif src.startswith('/'):
+                        src = f'{base_url}{src}'
+                    elif not src.startswith(('http://', 'https://')):
+                        src = urljoin(base_url, src)
+                    
+                    if src not in downloaded_urls:
+                        res = requests.get(src, verify=False, timeout=10)
+                        if res.ok:
+                            local_path = os.path.join(target_path, urlparse(src).path.lstrip('/'))
+                            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                            with open(local_path, 'wb') as f:
+                                f.write(res.content)
+                            downloaded_urls.add(src)
+                            self.logger.debug(f"下载资源成功: {src}")
+                        else:
+                            self.logger.warning(f"资源下载失败: {src}, 状态码: {res.status_code}")
+                except Exception as e:
+                    self.logger.warning(f"下载资源失败 {src}: {str(e)}")

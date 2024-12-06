@@ -773,111 +773,198 @@ class App {
     }
 
     async configureMirror(domain) {
-        // 先获取当前站点信息
-        const site = await api.getSite(domain);
-        
-        const modal = document.createElement('div');
-        modal.className = 'modal';
-        modal.innerHTML = `
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>${domain} 镜像配置</h3>
-                    <button class="close-btn">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <form id="mirrorForm" class="mirror-form">
-                        <div class="form-group">
-                            <label>目标域名 <span class="required">*</span></label>
-                            <input type="text" name="target_domain" required placeholder="target.com">
-                            <div class="hint">请输入要镜像的目标网站域名</div>
+        try {
+            // 先获取当前站点信息和镜像状态
+            const site = await api.getSite(domain);
+            const mirrorStatus = await api.getMirrorStatus(domain);
+            
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            
+            // 如果已经存在镜像，显示镜像信息
+            if (mirrorStatus.exists) {
+                modal.innerHTML = `
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>${domain} 镜像站信息</h3>
+                            <button class="close-btn">&times;</button>
                         </div>
-                        <div class="form-group">
-                            <label>目标存放路径</label>
-                            <input type="text" name="target_path" required 
-                                value="${site.root_path}" 
-                                readonly
-                                title="使用当前站点根目录">
-                            <div class="hint">镜像内容将存放在当前站点根目录</div>
-                        </div>
-                        <div class="form-group">
-                            <label>镜像选项</label>
-                            <div class="checkbox-group">
-                                <label>
-                                    <input type="checkbox" name="overwrite">
-                                    覆盖已存在的文件
-                                </label>
+                        <div class="modal-body">
+                            <div class="mirror-info">
+                                <div class="info-section">
+                                    <h4>基本信息</h4>
+                                    <div class="info-item">
+                                        <label>目标站点</label>
+                                        <span>${mirrorStatus.target_domain}</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <label>镜像时间</label>
+                                        <span>${mirrorStatus.mirror_time}</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <label>文件数量</label>
+                                        <span>${mirrorStatus.files_count} 个文件</span>
+                                    </div>
+                                </div>
+                                <div class="info-section">
+                                    <h4>配置信息</h4>
+                                    <div class="info-item">
+                                        <label>站点地图</label>
+                                        <span>${mirrorStatus.sitemap ? '已生成' : '未生成'}</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <label>TDK替换</label>
+                                        <span>${mirrorStatus.tdk ? '已替换' : '未替换'}</span>
+                                    </div>
+                                </div>
+                                <div class="button-group mt-4">
+                                    <button class="btn btn-warning" onclick="app.refreshMirror('${domain}')">
+                                        刷新镜像
+                                    </button>
+                                    <button class="btn btn-danger" onclick="app.deleteMirror('${domain}')">
+                                        删除镜像
+                                    </button>
+                                </div>
                             </div>
-                            <div class="checkbox-group">
-                                <label>
-                                    <input type="checkbox" name="sitemap">
-                                    生成站点地图
-                                </label>
-                            </div>
-                            <div class="checkbox-group">
-                                <label>
-                                    <input type="checkbox" name="tdk">
-                                    替换TDK信息
-                                </label>
-                            </div>
                         </div>
-                        <div class="form-group tdk-rules" style="display: none;">
-                            <label>TDK替换规则</label>
-                            <textarea name="tdk_rules" rows="4" placeholder='{"title": "新标题", "keywords": "新关键词", "description": "新描述"}'></textarea>
-                            <div class="hint">请使用JSON格式配置要替换的标题、关键词和描述</div>
+                    </div>
+                `;
+            } else {
+                // 显示新建镜像表单
+                modal.innerHTML = `
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>${domain} 镜像配置</h3>
+                            <button class="close-btn">&times;</button>
                         </div>
-                        <div class="button-group">
-                            <button type="submit" class="btn">开始镜像</button>
+                        <div class="modal-body">
+                            <form id="mirrorForm" class="mirror-form">
+                                <div class="form-group">
+                                    <label>目标域名 <span class="required">*</span></label>
+                                    <input type="text" name="target_domain" required placeholder="target.com">
+                                    <div class="hint">请输入要镜像的目标网站域名</div>
+                                </div>
+                                <div class="form-group">
+                                    <label>目标存放路径</label>
+                                    <input type="text" name="target_path" required 
+                                        value="${site.root_path}" 
+                                        readonly
+                                        title="使用当前站点根目录">
+                                    <div class="hint">镜像内容将存放在当前站点根目录</div>
+                                </div>
+                                <div class="form-group">
+                                    <label>镜像选项</label>
+                                    <div class="checkbox-group">
+                                        <label>
+                                            <input type="checkbox" name="overwrite">
+                                            覆盖已存在的文件
+                                        </label>
+                                    </div>
+                                    <div class="checkbox-group">
+                                        <label>
+                                            <input type="checkbox" name="sitemap">
+                                            生成站点地图
+                                        </label>
+                                    </div>
+                                    <div class="checkbox-group">
+                                        <label>
+                                            <input type="checkbox" name="tdk">
+                                            替换TDK信息
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="form-group tdk-rules" style="display: none;">
+                                    <label>TDK替换规则</label>
+                                    <textarea name="tdk_rules" rows="4" placeholder='{"title": "新标题", "keywords": "新关键词", "description": "新描述"}'></textarea>
+                                    <div class="hint">请使用JSON格式配置要替换的标题、关键词和描述</div>
+                                </div>
+                                <div class="button-group">
+                                    <button type="submit" class="btn">开始镜像</button>
+                                </div>
+                            </form>
                         </div>
-                    </form>
-                </div>
-            </div>
-        `;
-
-        document.body.appendChild(modal);
-
-        // TDK选项切换
-        const tdkCheckbox = modal.querySelector('input[name="tdk"]');
-        const tdkRulesGroup = modal.querySelector('.tdk-rules');
-        tdkCheckbox.addEventListener('change', () => {
-            tdkRulesGroup.style.display = tdkCheckbox.checked ? 'block' : 'none';
-        });
-
-        // 表单提交
-        const form = modal.querySelector('#mirrorForm');
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const submitBtn = form.querySelector('button[type="submit"]');
-            submitBtn.disabled = true;
-            submitBtn.textContent = '处理中...';
-
-            try {
-                const formData = new FormData(form);
-                const data = {
-                    domain: domain,
-                    target_domain: formData.get('target_domain'),
-                    target_path: formData.get('target_path'),
-                    overwrite: formData.get('overwrite') === 'on',
-                    sitemap: formData.get('sitemap') === 'on',
-                    tdk: formData.get('tdk') === 'on',
-                    tdk_rules: formData.get('tdk') ? JSON.parse(formData.get('tdk_rules')) : null
-                };
-
-                await api.mirrorSite(data);
-                this.showSuccess('镜像配置成功');
-                modal.remove();
-            } catch (error) {
-                this.showError(error.message);
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.textContent = '开始镜像';
+                    </div>
+                `;
             }
-        });
 
-        // 关闭按钮事件
-        modal.querySelector('.close-btn').onclick = () => modal.remove();
-        modal.onclick = (e) => {
-            if (e.target === modal) modal.remove();
-        };
+            document.body.appendChild(modal);
+            
+            // TDK选项切换
+            const tdkCheckbox = modal.querySelector('input[name="tdk"]');
+            const tdkRulesGroup = modal.querySelector('.tdk-rules');
+            tdkCheckbox.addEventListener('change', () => {
+                tdkRulesGroup.style.display = tdkCheckbox.checked ? 'block' : 'none';
+            });
+
+            // 表单提交
+            const form = modal.querySelector('#mirrorForm');
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const submitBtn = form.querySelector('button[type="submit"]');
+                submitBtn.disabled = true;
+                submitBtn.textContent = '处理中...';
+
+                try {
+                    const formData = new FormData(form);
+                    const data = {
+                        domain: domain,
+                        target_domain: formData.get('target_domain'),
+                        target_path: formData.get('target_path'),
+                        overwrite: formData.get('overwrite') === 'on',
+                        sitemap: formData.get('sitemap') === 'on',
+                        tdk: formData.get('tdk') === 'on',
+                        tdk_rules: formData.get('tdk') ? JSON.parse(formData.get('tdk_rules')) : null
+                    };
+
+                    await api.mirrorSite(data);
+                    this.showSuccess('镜像配置成功');
+                    modal.remove();
+                } catch (error) {
+                    this.showError(error.message);
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '开始镜像';
+                }
+            });
+
+            // 关闭按钮事件
+            modal.querySelector('.close-btn').onclick = () => modal.remove();
+            modal.onclick = (e) => {
+                if (e.target === modal) modal.remove();
+            };
+        } catch (error) {
+            this.showError(`加载镜像配置失败: ${error.message}`);
+        }
+    }
+
+    // 刷新镜像
+    async refreshMirror(domain) {
+        if (!confirm('确定要刷新镜像站点吗？这将重新下载所有资源。')) {
+            return;
+        }
+        
+        try {
+            await api.refreshMirror(domain);
+            this.showSuccess('镜像刷新成功');
+            document.querySelector('.modal').remove();
+        } catch (error) {
+            this.showError(`刷新镜像失败: ${error.message}`);
+        }
+    }
+
+    // 删除镜像
+    async deleteMirror(domain) {
+        if (!confirm('确定要删除镜像站点吗？此操作不可恢复！')) {
+            return;
+        }
+        
+        try {
+            await api.deleteMirror(domain);
+            this.showSuccess('镜像删除成功');
+            document.querySelector('.modal').remove();
+        } catch (error) {
+            this.showError(`删除镜像失败: ${error.message}`);
+        }
     }
 }
 

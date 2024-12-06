@@ -59,3 +59,12 @@ class LogResponse(BaseModel):
     message: str
     data: Optional[Dict[str, Any]] = None
     logs: Optional[Dict[str, List[str]]] = None
+
+class MirrorStatus(BaseModel):
+    """镜像状态模型"""
+    exists: bool
+    target_domain: Optional[str] = None
+    mirror_time: Optional[str] = None
+    files_count: Optional[int] = None
+    sitemap: Optional[bool] = None
+    tdk: Optional[bool] = None
