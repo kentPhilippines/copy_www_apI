@@ -223,15 +223,20 @@ server {
 
     def _generate_site_config(self, site: NginxSite) -> str:
         """生成站点配置"""
+        # 基础配置
         config = f"""
 server {{
     listen 80;
+    listen [::]:80;
     server_name {site.domain};
+    
+    # 如果启用了SSL，将所有HTTP请求重定向到HTTPS
+    {'''return 301 https://$server_name$request_uri;''' if site.ssl_enabled else '''
     root {site.root_path};
     index index.html index.htm index.php;
     
     # 允许访问所有静态文件
-    location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot|map)$ {{
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot|map|html|htm)$ {{
         expires 30d;
         access_log off;
         add_header Cache-Control "public";
@@ -241,6 +246,9 @@ server {{
     # 默认location配置
     location / {{
         try_files $uri $uri/ /index.html;
+        autoindex on;  # 启用目录浏览
+        autoindex_exact_size off;
+        autoindex_localtime on;
     }}
     
     # 日志配置
@@ -251,12 +259,21 @@ server {{
     location ~ /\. {{
         deny all;
     }}
+    '''}}
+}}
 """
 
-        # 如果启用了SSL且证书信息存在
+        # 如果启用了SSL，添加HTTPS服务器块
         if site.ssl_enabled and site.ssl_info is not None:
             config += f"""
+server {{
     listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name {site.domain};
+    root {site.root_path};
+    index index.html index.htm index.php;
+
+    # SSL配置
     ssl_certificate {site.ssl_info.cert_path};
     ssl_certificate_key {site.ssl_info.key_path};
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -267,25 +284,35 @@ server {{
     ssl_stapling on;
     ssl_stapling_verify on;
     add_header Strict-Transport-Security "max-age=31536000" always;
-"""
 
-        # 添加自定义配置
-        if site.custom_config:
-            config += f"\n    # 自定义配置\n{site.custom_config}\n"
+    # 允许访问所有静态文件
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot|map|html|htm)$ {{
+        expires 30d;
+        access_log off;
+        add_header Cache-Control "public";
+        try_files $uri $uri/ =404;
+    }}
+    
+    # 默认location配置
+    location / {{
+        try_files $uri $uri/ /index.html;
+        autoindex on;  # 启用目录浏览
+        autoindex_exact_size off;
+        autoindex_localtime on;
+    }}
+    
+    # 日志配置
+    access_log /var/log/nginx/{site.domain}.access.log combined;
+    error_log /var/log/nginx/{site.domain}.error.log;
+    
+    # 安全相关配置
+    location ~ /\. {{
+        deny all;
+    }}
 
-        config += "}\n"
-
-        # 如果启用了SSL且证书信息存在，添加HTTP到HTTPS的重定向
-        if site.ssl_enabled and site.ssl_info is not None:
-            config = f"""
-# HTTP重定向到HTTPS
-server {{
-    listen 80;
-    server_name {site.domain};
-    return 301 https://$server_name$request_uri;
+    # 添加自定义配置
+    {site.custom_config if site.custom_config else ''}
 }}
-
-{config}
 """
 
         return config
@@ -643,7 +670,7 @@ server {{
     async def _check_site_status(self, domain: str, site_info: Dict[str, Any]) -> Dict[str, Any]:
         """检查站点状态"""
         try:
-            # ���查配置文件语法
+            # 查配置文件语法
             await run_command("nginx -t")
             
             # 检查进程是否运行
@@ -714,7 +741,7 @@ server {{
                 return
 
             try:
-                # ���开日志文件并移动到文件末尾
+                # 开日志文件并移动到文件末尾
                 async with aiofiles.open(log_file, mode='r') as file:
                     # 先移动到文件末尾
                     await file.seek(0, 2)
@@ -878,7 +905,7 @@ server {{
                     interface_data = data['interfaces'][0]  # 使用第一个接口
                     if 'traffic' in interface_data and 'hours' in interface_data['traffic']:
                         hours = interface_data['traffic']['hours']
-                        # 取最近30条记录
+                        # 取最���30条记录
                         for hour in hours[-30:]:
                             history.append({
                                 'time': f"{hour.get('time', '00')}:00",
