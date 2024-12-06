@@ -248,6 +248,9 @@ main() {
     # 验证安装
     verify_installation
     
+    # 初始化数据库
+    python3 -m app.db.init_db
+    
     info "安装完成！"
     info "你现在可以使用以下命令启动服务："
     info "source venv/bin/activate && ./scripts/start.sh"

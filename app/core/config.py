@@ -19,7 +19,11 @@ class Settings(BaseSettings):
     LOG_DIR: str = "logs"
     
     # 数据库配置
-    DATABASE_URL: str = f"sqlite:///{DATA_DIR}/nginx_deploy.db"
+    DATABASE_URL: str = os.getenv(
+        "DATABASE_URL", 
+        "sqlite:///./data/nginx_manager.db"
+    )
+    SQL_DEBUG: bool = os.getenv("SQL_DEBUG", "false").lower() == "true"
     
     # CORS配置
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
