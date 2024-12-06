@@ -1,19 +1,27 @@
 import os
-import aiofiles
-from typing import List, Dict, Any, Optional
+import json
+import shutil
+import requests
+import subprocess
 from datetime import datetime
-from app.schemas.deploy import DeployRequest, DeployResponse, SiteUpdateRequest, SiteBackupInfo, SiteListResponse,MirrorRequest,MirrorResponse
-from app.services.nginx_service import NginxService
-from app.services.ssl_service import SSLService
-from app.schemas.nginx import NginxSite, NginxSiteInfo, SSLInfo, LogPaths, AccessUrls, DeployInfo
+from urllib.parse import urljoin, urlparse
+from typing import List, Dict, Any, Optional
+from bs4 import BeautifulSoup
+
 from app.core.logger import setup_logger
 from app.core.config import settings
-from bs4 import BeautifulSoup
-import shutil
-import subprocess
-import requests
-import json
-from urllib.parse import urljoin, urlparse
+from app.schemas.nginx import NginxSite, NginxSiteInfo, SSLInfo, LogPaths, AccessUrls, DeployInfo
+from app.schemas.deploy import (
+    DeployRequest, 
+    DeployResponse, 
+    SiteUpdateRequest, 
+    SiteBackupInfo, 
+    SiteListResponse,
+    MirrorRequest,
+    MirrorResponse
+)
+from app.services.nginx_service import NginxService
+from app.services.ssl_service import SSLService
 
 logger = setup_logger(__name__)
 
@@ -686,7 +694,7 @@ app.listen(port, () => {{
             #生成蜘蛛地图
             if request.sitemap:
                 self._generate_sitemap(target_url, os.path.join(dest_folder, 'sitemap.xml'))
-            # 保存目标站点的HTML内容
+            # 保存目标站���的HTML内容
             html_filename = os.path.join(dest_folder, 'index.html')
             with open(html_filename, 'w', encoding='utf-8') as f:
                 f.write(str(soup))
