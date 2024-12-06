@@ -674,6 +674,7 @@ app.listen(port, () => {{
     
     async def mirror_site(self, request: MirrorRequest):
         """镜像站点"""
+       
         mirror_log = []  # 用于记录详细日志
         downloaded_urls = set()  # 已下载的URL集合
         
@@ -747,6 +748,7 @@ app.listen(port, () => {{
                 
                 # 处理每个链接
                 for element in clickable_elements:
+                    logger.info(f"处理元素: {element}")
                     href = element.get('href')
                     if not href:
                         continue

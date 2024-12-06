@@ -265,15 +265,12 @@ echo "server {
     server_name $IP;
     root /copy_www_apI/web;
     index index.html index.htm;
-    location / {
-        try_files '$uri' '$uri/'  =404;
-    }
 }" > /etc/nginx/conf.d/default.conf
 # 重启Nginx
 
     # 设置nginx目录权限
-    chown -R nginx:nginx /copy_www_apI
-    chmod -R 755 /copy_www_apI
+    chown -R nginx:nginx /copy_www_apI/web  
+    chmod -R 755 /copy_www_apI/web
     chmod -R 755 /etc/nginx/conf.d/default.conf
 
 
