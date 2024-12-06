@@ -71,7 +71,7 @@ class DownloadManager:
                         await self._handle_directory(task)
                         return
 
-                    # 下载文件
+                    # 下载文���
                     async with self.session.get(task.source_url, verify_ssl=False, timeout=30) as response:
                         if response.status != 200:
                             raise Exception(f"下载失败: HTTP {response.status}")
@@ -81,26 +81,48 @@ class DownloadManager:
                         total_size = int(response.headers.get('content-length', 0))
                         task.file_size = total_size
 
-                        # 创建目录
-                        os.makedirs(os.path.dirname(task.target_path), exist_ok=True)
+                        # 准备保存路径
+                        try:
+                            # 确保目标目录存在
+                            target_dir = os.path.dirname(task.target_path)
+                            if os.path.exists(target_dir) and not os.path.isdir(target_dir):
+                                # 如果存在同名文件，将其重命名
+                                os.rename(target_dir, f"{target_dir}.file")
+                            os.makedirs(target_dir, exist_ok=True)
 
-                        # 保存文件，同更新进度
-                        downloaded_size = 0
-                        with open(task.target_path, 'wb') as f:
-                            async for chunk in response.content.iter_chunked(8192):
-                                f.write(chunk)
-                                downloaded_size += len(chunk)
-                                await self._update_progress(task, downloaded_size, total_size)
+                            # 如果目标路径是目录，在路径后添加文件名
+                            if os.path.isdir(task.target_path):
+                                filename = os.path.basename(task.source_url)
+                                if not filename:
+                                    filename = 'index.html'
+                                task.target_path = os.path.join(task.target_path, filename)
 
-                        # 设置权限
-                        await run_command(f"chown nginx:nginx {task.target_path}")
+                            # 保存文件，同时更新进度
+                            downloaded_size = 0
+                            with open(task.target_path, 'wb') as f:
+                                async for chunk in response.content.iter_chunked(8192):
+                                    f.write(chunk)
+                                    downloaded_size += len(chunk)
+                                    await self._update_progress(task, downloaded_size, total_size)
 
-                        # 更新状态
-                        task.status = "completed"
-                        task.updated_at = datetime.utcnow()
-                        task.progress = 100
-                        self.downloaded_urls.add(task.source_url)
-                        return
+                            # 设置权限
+                            await run_command(f"chown nginx:nginx {task.target_path}")
+
+                            # 更新状态
+                            task.status = "completed"
+                            task.updated_at = datetime.utcnow()
+                            task.progress = 100
+                            self.downloaded_urls.add(task.source_url)
+                            return
+
+                        except IsADirectoryError:
+                            # 如果目标路径是目录，在路径中添加文件名
+                            filename = os.path.basename(task.source_url)
+                            if not filename:
+                                filename = 'index.html'
+                            task.target_path = os.path.join(task.target_path, filename)
+                            # 重试当前下载
+                            continue
 
                 except asyncio.TimeoutError:
                     logger.warning(f"下载超时 {task.source_url} (重试 {retries + 1}/{self.max_retries})")
@@ -218,6 +240,9 @@ class DownloadManager:
         """处理目录任务"""
         try:
             task.is_directory = True
+            # 如果目标路径已存在且是文件，将其重命名
+            if os.path.exists(task.target_path) and not os.path.isdir(task.target_path):
+                os.rename(task.target_path, f"{task.target_path}.file")
             os.makedirs(task.target_path, exist_ok=True)
             await run_command(f"chown nginx:nginx {task.target_path}")
             task.status = "completed"
