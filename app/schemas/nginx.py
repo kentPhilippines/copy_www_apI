@@ -21,8 +21,13 @@ class AccessUrls(BaseModel):
 class NginxSite(BaseModel):
     """Nginx站点配置模型"""
     domain: str
-    root_path: Optional[str] = None
+    root_path: str
+    root_exists: bool = False
+    ports: List[int] = [80]
+    ssl_ports: List[int] = []
     ssl_enabled: bool = False
+    ssl_certificate: Optional[str] = None
+    ssl_certificate_key: Optional[str] = None
     ssl_info: Optional[SSLInfo] = None
     custom_config: Optional[str] = None
     deploy_type: str = 'static'
@@ -30,6 +35,24 @@ class NginxSite(BaseModel):
     config_file: Optional[str] = None
     logs: Optional[LogPaths] = None
     access_urls: Optional[AccessUrls] = None
+    error: Optional[str] = None
+
+    class Config:
+        extra = "allow"
+
+    @property
+    def ssl_cert_path(self) -> Optional[str]:
+        """获取SSL证书路径"""
+        if self.ssl_info:
+            return self.ssl_info.cert_path
+        return self.ssl_certificate
+
+    @property
+    def ssl_key_path(self) -> Optional[str]:
+        """获取SSL密钥路径"""
+        if self.ssl_info:
+            return self.ssl_info.key_path
+        return self.ssl_certificate_key
 
 class DeployInfo(BaseModel):
     """部署信息"""
