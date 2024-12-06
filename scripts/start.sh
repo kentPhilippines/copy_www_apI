@@ -82,7 +82,7 @@ check_services() {
     fi
     
     # 检查目录权限
-    if [ ! -w "/etc/nginx/sites-available" ]; then
+    if [ ! -w "/etc/nginx/conf.d" ]; then
         error "没有Nginx配置目录的写入权限"
         exit 1
     fi
