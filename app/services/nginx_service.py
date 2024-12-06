@@ -177,7 +177,7 @@ server {
             await run_command(f"chmod -R 755 {site_root}")
             
             # 生成配置文件
-            config_content = generate_nginx_config(site)
+            config_content = self._generate_site_config(site)
             config_path = f"/etc/nginx/conf.d/{site.domain}.conf"
             
             # 写入配置文件
@@ -213,6 +213,75 @@ server {
         except Exception as e:
             logger.error(f"创建站点失败: {str(e)}")
             raise
+
+    def _generate_site_config(self, site: NginxSite) -> str:
+        """生成站点配置"""
+        config = f"""
+server {{
+    listen 80;
+    server_name {site.domain};
+    root {site.root_path};
+    index index.html index.htm index.php;
+    
+    # 允许访问所有静态文件
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot|map)$ {{
+        expires 30d;
+        access_log off;
+        add_header Cache-Control "public";
+        try_files $uri $uri/ =404;
+    }}
+    
+    # 默认location配置
+    location / {{
+        try_files $uri $uri/ /index.html;
+    }}
+    
+    # 日志配置
+    access_log /var/log/nginx/{site.domain}.access.log combined;
+    error_log /var/log/nginx/{site.domain}.error.log;
+    
+    # 安全相关配置
+    location ~ /\. {{
+        deny all;
+    }}
+"""
+
+        # 如果启用了SSL
+        if site.ssl_enabled:
+            config += f"""
+    listen 443 ssl http2;
+    ssl_certificate {site.ssl_info.cert_path};
+    ssl_certificate_key {site.ssl_info.key_path};
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:50m;
+    ssl_stapling on;
+    ssl_stapling_verify on;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+"""
+
+        # 添加自定义配置
+        if site.custom_config:
+            config += f"\n    # 自定义配置\n{site.custom_config}\n"
+
+        config += "}\n"
+
+        # 如果启用了SSL，添加HTTP到HTTPS的重定向
+        if site.ssl_enabled:
+            config = f"""
+# HTTP重定向到HTTPS
+server {{
+    listen 80;
+    server_name {site.domain};
+    return 301 https://$server_name$request_uri;
+}}
+
+{config}
+"""
+
+        return config
 
     async def delete_site(self, domain: str) -> NginxResponse:
         """删除站点配置"""
@@ -678,7 +747,7 @@ server {
         try:
             # 确定日志文件路径
             if domain:
-                # 域名相关的日志
+                # 域名���关的日志
                 log_file = f"/var/log/nginx/{domain}.{log_type}.log"
             else:
                 # Nginx 主日志
@@ -811,7 +880,7 @@ server {
                             })
                         return history
 
-                self.logger.warning("vnstat数据格式不符合预期，使用模拟数据")
+                self.logger.warning("vnstat数据格式不符合预期，使用模��数据")
                 return self._get_mock_network_history()
 
             except (json.JSONDecodeError, KeyError, IndexError) as e:
