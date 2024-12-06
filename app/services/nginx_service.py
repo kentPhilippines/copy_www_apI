@@ -41,126 +41,6 @@ class NginxService:
         except Exception as e:
             logger.error(f"Nginx服务重启失败: {str(e)}")
             raise
-
-    async def _init_nginx_config(self):
-        """初始化Nginx配置"""
-        try:
-            # 确保Nginx用户存在
-            nginx_user = await self._ensure_nginx_user()
-            logger.info(f"使用Nginx用户: {nginx_user}")
-            
-            # 创建必要的目录结构
-            dirs = [
-                "/etc/nginx/conf.d",
-                "/var/www",
-                "/var/log/nginx"
-            ]
-            for dir_path in dirs:
-                os.makedirs(dir_path, exist_ok=True)
-                await run_command(f"chown -R {nginx_user} {dir_path}")
-                await run_command(f"chmod -R 755 {dir_path}")
-
-            # 创建主配置文件
-            main_config = f"""
-user nginx;
-worker_processes auto;
-pid /run/nginx.pid;
-
-events {{
-    worker_connections 1024;
-    multi_accept on;
-    use epoll;
-}}
-
-http {{
-    sendfile on;
-    tcp_nopush on;
-    tcp_nodelay on;
-    keepalive_timeout 65;
-    types_hash_max_size 2048;
-    server_tokens off;
-
-    # MIME
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-
-    # 日志格式
-    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
-                    '$status $body_bytes_sent "$http_referer" '
-                    '"$http_user_agent" "$http_x_forwarded_for"';
-
-    # 日志配置
-    access_log /var/log/nginx/access.log main;
-    error_log /var/log/nginx/error.log warn;
-
-    # Gzip压缩
-    gzip on;
-    gzip_disable "msie6";
-    gzip_vary on;
-    gzip_proxied any;
-    gzip_comp_level 6;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
-
-    # 包含站点配置
-    include /etc/nginx/conf.d/*.conf;
-}}
-"""
-            # 写入主配置文件
-            nginx_conf_path = "/etc/nginx/nginx.conf"
-            async with aiofiles.open(nginx_conf_path, 'w') as f:
-                await f.write(main_config)
-
-            # 设置配置文件权限
-            await run_command(f"chown {nginx_user} {nginx_conf_path}")
-            await run_command(f"chmod 644 {nginx_conf_path}")
-
-            # 删除默认配置
-            default_conf = "/etc/nginx/conf.d/default.conf"
-            if os.path.exists(default_conf):
-                os.remove(default_conf)
-                logger.info("删除默认配置")
-
-            # 创建新的默认配置
-            default_conf = """
-# 默认服务器配置
-server {
-    listen 80;
-    server_name _;
-
-    # 拒绝未知域名的访问
-    location / {
-        return 444;
-    }
-
-    # 禁止访问隐藏文件
-    location ~ /\\. {
-        deny all;
-        access_log off;
-        log_not_found off;
-    }
-}
-"""
-            default_conf_path = "/etc/nginx/conf.d/default.conf"
-            async with aiofiles.open(default_conf_path, 'w') as f:
-                await f.write(default_conf)
-
-            # 设置默认配置文件权限
-            await run_command(f"chown {nginx_user} {default_conf_path}")
-            await run_command(f"chmod 644 {default_conf_path}")
-
-            # 测试配置
-            await run_command("nginx -t")
-
-            # 重启Nginx以应用新配置
-            await run_command("systemctl restart nginx")
-            await run_command("sleep 2")  # 等待服务启动
-
-            logger.info("Nginx配置初始化完成")
-
-        except Exception as e:
-            logger.error(f"初始化Nginx配置失败: {str(e)}")
-            raise
-
     async def create_site(self, site: NginxSite) -> NginxResponse:
         """创建站点配置"""
         try:
@@ -171,8 +51,6 @@ server {
                     message="启用SSL但未提供证书信息"
                 )
 
-            # 初始化Nginx配置
-            await self._init_nginx_config()
             
             # 获取正确的Nginx用户
             nginx_user = await self._ensure_nginx_user()
@@ -1038,4 +916,3 @@ server {
             return NginxResponse(success=True, message="Nginx已重启")
         except Exception as e:
             return NginxResponse(success=False, message=f"Nginx重启失败: {str(e)}")
-    

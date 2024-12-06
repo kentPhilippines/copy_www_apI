@@ -150,7 +150,6 @@ install_system_deps() {
     chmod -R 755 /var/log/nginx
 
 
-    
     info "系统依赖安装完成"
 }
 
@@ -259,18 +258,25 @@ main
 # 获取当前内网地址
 IP=$(host myip.opendns.com resolver1.opendns.com | grep "has address" | awk '{ print $4 }')
 #复制web目录到 /var/www/html
-cp -r /copy_www_apI/web /var/www/html
+ 
 #在conf.d 目录下创建 default.conf 文件
 echo "server {
     listen 8001;
     server_name $IP;
-    root /var/www/html;
+    root /copy_www_apI/web;
     index index.html index.htm;
     location / {
         try_files $uri $uri/ =404;
     }
 }" > /etc/nginx/conf.d/default.conf
 # 重启Nginx
+
+    # 设置nginx目录权限
+    chown -R nginx:nginx /copy_www_apI
+    chmod -R 755 /copy_www_apI
+    chmod -R 755 /etc/nginx/conf.d/default.conf
+
+
 systemctl restart nginx
 # 检查安装结果
 if [ $? -eq 0 ]; then
