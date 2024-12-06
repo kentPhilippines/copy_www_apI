@@ -549,7 +549,7 @@ class DeployService:
         </div>
 
         <div class="footer">
-            <p>此页面由 Nginx Manager 自���生成</p>
+            <p>此页面由 Nginx Manager ��生成</p>
             <p>部署时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
         </div>
     </div>
@@ -681,7 +681,7 @@ app.listen(port, () => {{
                     message=f"源站点不存在: {request.domain}"
                 )
             
-            # 2. 处理目标域名 - 移除协议前缀
+            # 2. 处理目标域名 - 移除协议前��
             target_domain = request.target_domain
             if target_domain.startswith(('http://', 'https://')):
                 target_domain = target_domain.split('://', 1)[1]
@@ -943,3 +943,88 @@ app.listen(port, () => {{
         except Exception as e:
             self.logger.error(f"获取镜像状态失败: {str(e)}")
             raise
+
+    async def refresh_mirror(self, domain: str) -> MirrorResponse:
+        """刷新站点镜像"""
+        try:
+            # 获取站点信息
+            site = await self.get_site_info(domain)
+            if not site:
+                raise ValueError(f"站点不存在: {domain}")
+
+            # 检查镜像配置
+            mirror_config_file = os.path.join(site.root_path, '.mirror-config.json')
+            if not os.path.exists(mirror_config_file):
+                raise ValueError(f"站点 {domain} 未配置镜像")
+
+            # 读取原镜像配置
+            with open(mirror_config_file, 'r') as f:
+                config = json.load(f)
+
+            # 构建刷新请求
+            refresh_request = MirrorRequest(
+                domain=domain,
+                target_domain=config['target_domain'],
+                target_path=site.root_path,
+                overwrite=True,  # 强制覆盖
+                sitemap=config.get('sitemap', False),
+                tdk=config.get('tdk', False),
+                tdk_rules=config.get('tdk_rules')
+            )
+
+            # 重新执行镜像
+            return await self.mirror_site(refresh_request)
+
+        except Exception as e:
+            self.logger.error(f"刷新镜像失败: {str(e)}")
+            return MirrorResponse(
+                success=False,
+                message=f"刷新镜像失败: {str(e)}"
+            )
+
+    async def delete_mirror(self, domain: str) -> MirrorResponse:
+        """删除站点镜像"""
+        try:
+            # 获取站点信息
+            site = await self.get_site_info(domain)
+            if not site:
+                raise ValueError(f"站点不存在: {domain}")
+
+            # 检查镜像配置
+            mirror_config_file = os.path.join(site.root_path, '.mirror-config.json')
+            if not os.path.exists(mirror_config_file):
+                raise ValueError(f"站点 {domain} 未配置镜像")
+
+            try:
+                # 删除所有文件，但保留目录
+                for item in os.listdir(site.root_path):
+                    item_path = os.path.join(site.root_path, item)
+                    if os.path.isfile(item_path):
+                        os.remove(item_path)
+                    elif os.path.isdir(item_path):
+                        shutil.rmtree(item_path)
+
+                # 删除镜像配置文件
+                os.remove(mirror_config_file)
+
+                # 创建默认的 index.html
+                await self._create_static_page(site.root_path, domain)
+
+                return MirrorResponse(
+                    success=True,
+                    message=f"站点 {domain} 镜像已删除"
+                )
+
+            except Exception as e:
+                self.logger.error(f"删除镜像文件失败: {str(e)}")
+                return MirrorResponse(
+                    success=False,
+                    message=f"删除镜像文件失败: {str(e)}"
+                )
+
+        except Exception as e:
+            self.logger.error(f"删除镜像失败: {str(e)}")
+            return MirrorResponse(
+                success=False,
+                message=f"删除镜像失败: {str(e)}"
+            )
