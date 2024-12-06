@@ -8,7 +8,7 @@ from urllib.parse import urljoin, urlparse
 from typing import List, Dict, Any, Optional
 from bs4 import BeautifulSoup
 from pathlib import Path
-
+from app.utils.shell import run_command
 from app.core.logger import setup_logger
 from app.core.config import settings
 from app.schemas.nginx import NginxSite, NginxSiteInfo, SSLInfo, LogPaths, AccessUrls, DeployInfo
@@ -795,6 +795,7 @@ app.listen(port, () => {{
                 }
                 
                 config_file = os.path.join(request.target_path, '.mirror-config.json')
+                logger.info(f"保存镜像配置: {config_file}")
                 with open(config_file, 'w') as f:
                     json.dump(mirror_config, f, indent=2)
                 
@@ -1142,6 +1143,9 @@ app.listen(port, () => {{
             with open(local_path, 'wb') as f:
                 f.write(response.content)
             
+            # 给nginx用户添加权限
+            await run_command(f"chown nginx:nginx {local_path}")
+
             # 添加到已下载集合
             downloaded_urls.add(src)
             

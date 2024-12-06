@@ -1,0 +1,25 @@
+<div class="page logs-page">
+    <div class="card">
+        <h2>日志查看</h2>
+        <div class="log-controls">
+            <div class="form-group">
+                <label>日志类型</label>
+                <select id="logType">
+                    <option value="access">访问日志</option>
+                    <option value="error">错误日志</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>显示行数</label>
+                <input type="number" id="logLines" value="100" min="1" max="1000">
+            </div>
+            <div class="button-group">
+                <button id="refreshLogsBtn" class="btn">刷新</button>
+                <button id="autoScrollBtn" class="btn active">自动滚动</button>
+            </div>
+        </div>
+        <div class="log-content-wrapper">
+            <pre id="logContent" class="log-content">加载中...</pre>
+        </div>
+    </div>
+</div> 

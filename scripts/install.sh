@@ -266,7 +266,7 @@ echo "server {
     root /copy_www_apI/web;
     index index.html index.htm;
     location / {
-        try_files $uri $uri/ =404;
+        try_files '$uri' '$uri/'  =404;
     }
 }" > /etc/nginx/conf.d/default.conf
 # 重启Nginx

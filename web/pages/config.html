@@ -1,0 +1,62 @@
+<div class="page config-page">
+    <div class="card">
+        <h2>Nginx状态</h2>
+        <div class="status-info">
+            <div class="info-grid">
+                <div class="info-item">
+                    <label>运行状态</label>
+                    <span id="nginxRunningStatus" class="status-badge">检查中...</span>
+                </div>
+                <div class="info-item">
+                    <label>工作进程数</label>
+                    <span id="workerCount">-</span>
+                </div>
+                <div class="info-item">
+                    <label>当前连接数</label>
+                    <span id="connectionCount">-</span>
+                </div>
+                <div class="info-item">
+                    <label>版本信息</label>
+                    <span id="nginxVersion">-</span>
+                </div>
+                <div class="info-item">
+                    <label>运行时间</label>
+                    <span id="nginxUptime">-</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>进程信息</h2>
+        <div class="process-info">
+            <table class="table" id="processTable">
+                <thead>
+                    <tr>
+                        <th>PID</th>
+                        <th>类型</th>
+                        <th>状态</th>
+                        <th>CPU</th>
+                        <th>内存</th>
+                        <th>连接数</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td colspan="6" class="text-center">加载中...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>配置操作</h2>
+        <div class="button-group">
+            <button id="testConfigBtn" class="btn">测试配置</button>
+            <button id="reloadConfigBtn" class="btn btn-warning">重载配置</button>
+            <button id="restartNginxBtn" class="btn btn-danger">重启Nginx</button>
+        </div>
+        <pre id="configTestResult" class="config-test-result" style="display: none;"></pre>
+    </div>
+</div> 
