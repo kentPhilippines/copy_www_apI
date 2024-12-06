@@ -105,7 +105,8 @@ check_port() {
     if command -v lsof &> /dev/null; then
         if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null ; then
             error "端口 $port 已被占用"
-            exit 1
+            #如果占用 kill掉
+            sudo kill -9 $(lsof -Pi :$port -sTCP:LISTEN -t)
         fi
     else
         warn "lsof 未安装，跳过端口检查"
@@ -159,34 +160,12 @@ start_api() {
     tail -n 5 logs/api.log
 }
 
-# 添加停止函数
-stop_api() {
-    if [ -f .api.pid ]; then
-        pid=$(cat .api.pid)
-        if ps -p $pid > /dev/null; then
-            kill $pid
-            info "API服务已停止 (PID: $pid)"
-        else
-            warn "API服务未运行"
-        fi
-        rm .api.pid
-    else
-        warn "未找到PID文件"
-    fi
-}
-
-# 添加重启函数
-restart_api() {
-    info "重启API服务..."
-    stop_api
-    sleep 2
-    start_api
-}
+ 
+ 
 
 # 修改主函数，支持命令行参数
 main() {
-    case "$1" in
-        start)
+  
             info "启动 Nginx Deploy API 服务..."
             check_commands
             check_venv
@@ -194,19 +173,7 @@ main() {
             check_services
             setup_directories
             start_api
-            ;;
-        stop)
-            stop_api
-            ;;
-        restart)
-            restart_api
-            ;;
-        *)
-            echo "用法: $0 {start|stop|restart}"
-            exit 1
-            ;;
-    esac
 }
 
 # 执行主函数，传入命令行参数
-main "${1:-start}"
+main  
