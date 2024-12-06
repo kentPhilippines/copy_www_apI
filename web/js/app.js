@@ -418,6 +418,7 @@ class App {
                 <div class="button-group">
                     <button id="testConfigBtn" class="btn">测试配置</button>
                     <button id="reloadConfigBtn" class="btn btn-warning">重载配置</button>
+                    <button id="restartNginxBtn" class="btn btn-danger">重启Nginx</button>
                 </div>
                 <pre id="configTestResult" class="config-test-result" style="display: none;"></pre>
             </div>
@@ -435,6 +436,7 @@ class App {
     async initConfigPage() {
         const testBtn = document.getElementById('testConfigBtn');
         const reloadBtn = document.getElementById('reloadConfigBtn');
+        const restartBtn = document.getElementById('restartNginxBtn');
         const resultPre = document.getElementById('configTestResult');
 
         testBtn.addEventListener('click', async () => {
@@ -459,6 +461,21 @@ class App {
                 testBtn.textContent = '测试配置';
             }
         });
+
+        restartBtn.addEventListener('click', async () => {
+            if (!confirm('确定要重启Nginx吗？')) return;
+            restartBtn.disabled = true;
+            restartBtn.textContent = '重启中...';
+
+            try {
+                const result = await api.restartNginx();
+                this.showSuccess(result.message);
+            } catch (error) {
+                this.showError(error.message);
+            } finally {
+                restartBtn.disabled = false;
+                restartBtn.textContent = '重启Nginx';
+            }
 
         reloadBtn.addEventListener('click', async () => {
             if (!confirm('确定要重载Nginx配置吗？')) return;

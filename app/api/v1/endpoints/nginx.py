@@ -38,11 +38,18 @@ async def list_sites():
     """获取所有网站配置"""
     return await nginx_service.list_sites()
 
-@router.post("/reload", response_model=NginxResponse)
+@router.get("/reload", response_model=NginxResponse)
 async def reload_nginx():
     """重新加载Nginx配置"""
     try:
         return await nginx_service.reload()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+@router.get("/restart", response_model=NginxResponse)
+async def restart_nginx():
+    """重启Nginx"""
+    try:
+        return await nginx_service.restart()
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

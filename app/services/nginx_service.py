@@ -971,3 +971,12 @@ server {{
         while True:
             await websocket.send_text(self.get_status())
             await asyncio.sleep(0.5)
+    
+    async def restart(self) -> NginxResponse:
+        """重启Nginx"""
+        try:
+            await run_command("sudo systemctl restart nginx")
+            return NginxResponse(success=True, message="Nginx已重启")
+        except Exception as e:
+            return NginxResponse(success=False, message=f"Nginx重启失败: {str(e)}")
+    

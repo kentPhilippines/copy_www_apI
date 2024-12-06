@@ -145,6 +145,11 @@ class API {
             method: 'DELETE'
         });
     }
+
+    // 重启Nginx
+    async restartNginx() {
+        return this.request('/nginx/restart');
+    }
 }
 
 // 创建全局API实例
