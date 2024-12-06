@@ -4,7 +4,7 @@ from app.core.logger import setup_logger
 import os
 import asyncio
 import aiohttp
-import aiodns
+import socket
 
 logger = setup_logger(__name__)
 
@@ -78,7 +78,7 @@ class SSLService:
                 }
 
             finally:
-                # 重新启动Nginx
+                # 重���启动Nginx
                 try:
                     await run_command("systemctl start nginx")
                     self.logger.info("Nginx服务已重新启动")
@@ -115,7 +115,7 @@ class SSLService:
             return False
 
     async def _get_server_ip(self) -> Optional[str]:
-        """获取服务器公网IP"""
+        """获取服��器公网IP"""
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get('https://api.ipify.org') as response:
@@ -127,9 +127,7 @@ class SSLService:
     async def _get_domain_ip(self, domain: str) -> Optional[str]:
         """获取域名解析IP"""
         try:
-            resolver = aiodns.DNSResolver()
-            result = await resolver.query(domain, 'A')
-            return result[0].host if result else None
+            return socket.gethostbyname(domain)
         except Exception as e:
             self.logger.error(f"获取域名IP失败: {str(e)}")
             return None
