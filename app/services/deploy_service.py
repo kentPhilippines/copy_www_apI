@@ -772,7 +772,7 @@ app.listen(port, () => {{
                                 os.path.dirname(page_path)
                             )
 
-            # 6. 保存处理后的页面
+            # 6. 保存处理后���页面
             with open(page_path, 'w', encoding='utf-8') as f:
                 f.write(str(soup))
             downloaded_urls.add(url)
@@ -802,7 +802,20 @@ app.listen(port, () => {{
             file_path = urlparse(src).path.lstrip('/') or f"{urlparse(src).netloc.replace('.', '_')}.html"
             local_path = os.path.join(target_path, file_path)
             
+            # 如果URL以/结尾，说明是目录
+            if src.endswith('/'):
+                if not os.path.exists(local_path):
+                    os.makedirs(local_path, exist_ok=True)
+                    await run_command(f"chown nginx:nginx {local_path}")
+                downloaded_urls.add(src)
+                self.logger.debug(f"创建目录: {local_path}")
+                return True
+            
             if os.path.exists(local_path):
+                if os.path.isdir(local_path):
+                    self.logger.debug(f"跳过目录: {local_path}")
+                    downloaded_urls.add(src)
+                    return True
                 self.logger.debug(f"资源已存在: {local_path}")
                 downloaded_urls.add(src)
                 return True
@@ -813,14 +826,19 @@ app.listen(port, () => {{
                 return False
 
             # 4. 保存文件
-            os.makedirs(os.path.dirname(local_path), exist_ok=True)
-            with open(local_path, 'wb') as f:
-                f.write(response.content)
-            await run_command(f"chown nginx:nginx {local_path}")
-            
-            downloaded_urls.add(src)
-            self.logger.debug(f"下载成功: {src} -> {local_path}")
-            return True
+            try:
+                os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                with open(local_path, 'wb') as f:
+                    f.write(response.content)
+                await run_command(f"chown nginx:nginx {local_path}")
+                
+                downloaded_urls.add(src)
+                self.logger.debug(f"下载成功: {src} -> {local_path}")
+                return True
+            except IsADirectoryError:
+                self.logger.debug(f"跳过目录: {local_path}")
+                downloaded_urls.add(src)
+                return True
 
         except Exception as e:
             self.logger.error(f"下载失败: {src} - {str(e)}")
