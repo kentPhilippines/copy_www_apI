@@ -149,6 +149,12 @@ install_system_deps() {
     chown -R nginx:nginx /var/log/nginx 
     chmod -R 755 /var/log/nginx
 
+
+    # 设置Nginx目录权限
+    mkdir -p /copy_www_apI/web
+    chown -R nginx:nginx /copy_www_apI/web
+    chmod -R 755 /copy_www_apI/web
+
     info "系统依赖安装完成"
 }
 
@@ -254,16 +260,16 @@ main() {
 
 # 执行安装
 main
+# 获取当前内网地址
+IP=$(hostname -I | awk '{print $1}')
 #在conf.d 目录下创建 default.conf 文件
 echo "server {
     listen 80;
-    server_name _;
+    server_name $IP;
     root /copy_www_apI/web;
     index index.html index.htm;
     location / {
-        proxy_pass http://127.0.0.1:8001;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
+        try_files $uri $uri/ =404;
     }
 }" > /etc/nginx/conf.d/default.conf
 # 重启Nginx

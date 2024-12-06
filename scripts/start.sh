@@ -146,9 +146,12 @@ start_api() {
         exit 1
     fi
     
+    #获取外网地址
+    IP=$(host myip.opendns.com resolver1.opendns.com | grep "has address" | awk '{ print $4 }')
+
     info "API服务启动成功!"
-    info "API地址: http://$(hostname -I | awk '{print $1}'):8000"
-    info "管理界面: http://$(hostname -I | awk '{print $1}'):8001"
+    info "API地址: http://$IP:8000"
+    info "管理界面: http://$IP:8001"
     info "日志文件: $(pwd)/logs/api.log"
     
     # 显示日志尾部
