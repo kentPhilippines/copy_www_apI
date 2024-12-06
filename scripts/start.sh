@@ -122,8 +122,17 @@ start_api() {
     # 确保requirements.txt中的依赖已安装
     pip install -r requirements.txt
     
-    # 启动服务
-    python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    # 启动服务 后台启动
+    nohup python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    # 检查服务是否启动
+    if ! pgrep -f "uvicorn main:app --host 0.0.0.0 --port 8000 --reload" > /dev/null; then
+        error "API服务启动失败"
+        exit 1
+    fi
+    # 检查端口
+    check_port 8001 
+    # 8001 为前台访问页面 这里给出提示语就可以了, 请访问为当前服务器的IP地址:8001
+    info "API服务启动成功，请访问 http://$(hostname -I | awk '{print $1}'):8001"
 }
 
 # 主流程

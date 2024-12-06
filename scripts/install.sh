@@ -254,7 +254,20 @@ main() {
 
 # 执行安装
 main
-
+#在conf.d 目录下创建 default.conf 文件
+echo "server {
+    listen 80;
+    server_name _;
+    root /copy_www_apI/web;
+    index index.html index.htm;
+    location / {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+    }
+}" > /etc/nginx/conf.d/default.conf
+# 重启Nginx
+systemctl restart nginx
 # 检查安装结果
 if [ $? -eq 0 ]; then
     info "==================================="
@@ -275,21 +288,10 @@ else
 fi 
 
 
+
+
+
 # 安装完成后，将 /web/index.html 复制到 /var/www/html/ 目录下
-cp web/index.html /var/www/html/
-#制定默认首页
-echo "server {
-    listen 80;
-    server_name _;
-    root /var/www/html;
-    index index.html index.htm;
-}" > /etc/nginx/conf.d/default.conf
-
-# 重启Nginx
-systemctl restart nginx
-
-
-
 #  直接执行
 #   source venv/bin/activate && ./scripts/install.sh
 
