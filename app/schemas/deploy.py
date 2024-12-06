@@ -52,6 +52,7 @@ class MirrorResponse(BaseModel):
     success: bool
     message: str
     data: Optional[Dict[str, Any]] = None
+    logs: Optional[List[Dict[str, str]]] = None
 
 class LogResponse(BaseModel):
     """日志响应模型"""

@@ -549,7 +549,7 @@ class DeployService:
         </div>
 
         <div class="footer">
-            <p>此页面由 Nginx Manager ��生成</p>
+            <p>此页面由 Nginx Manager 生成</p>
             <p>部署时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
         </div>
     </div>
@@ -671,195 +671,152 @@ app.listen(port, () => {{
     
     async def mirror_site(self, request: MirrorRequest):
         """镜像站点"""
+        mirror_log = []  # 用于记录详细日志
+        downloaded_urls = set()  # 已下载的URL集合
+        
+        def add_log(message: str, level: str = 'info'):
+            """添加日志"""
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            mirror_log.append({
+                'time': timestamp,
+                'level': level,
+                'message': message
+            })
+            if level == 'error':
+                self.logger.error(message)
+            elif level == 'warning':
+                self.logger.warning(message)
+            else:
+                self.logger.info(message)
+
         try:
-            # 1. 检查源站点是否存在
+            add_log(f"开始镜像站点: {request.domain} -> {request.target_domain}")
+            
+            # 1. 检查源站点
             source_site = await self.get_site_info(request.domain)
             if not source_site:
-                self.logger.error(f"源站点不存在: {request.domain}")
+                add_log(f"源站点不存在: {request.domain}", 'error')
                 return MirrorResponse(
                     success=False,
-                    message=f"源站点不存在: {request.domain}"
+                    message=f"源站点不存在: {request.domain}",
+                    logs=mirror_log
                 )
             
-            # 2. 处理目标域名 - 移除协议前��
+            # 2. 处理目标域名
             target_domain = request.target_domain
             if target_domain.startswith(('http://', 'https://')):
+                add_log(f"处理目标域名: {target_domain}")
                 target_domain = target_domain.split('://', 1)[1]
             
-            # 3. 确保目标路径存在
+            # 3. 创建目录
             try:
                 os.makedirs(request.target_path, exist_ok=True)
-            except PermissionError:
-                self.logger.error(f"无权限创建目录: {request.target_path}")
-                return MirrorResponse(
-                    success=False,
-                    message=f"无权限创建目录: {request.target_path}"
-                )
+                add_log(f"创建目标目录: {request.target_path}")
             except Exception as e:
-                self.logger.error(f"创建目录失败: {request.target_path}, 错误: {str(e)}")
+                add_log(f"创建目录失败: {str(e)}", 'error')
                 return MirrorResponse(
                     success=False,
-                    message=f"创建目录失败: {str(e)}"
+                    message=f"��建目录失败: {str(e)}",
+                    logs=mirror_log
                 )
-            
-            # 4. 构建完整的目标URL
+
+            # 4. 获取目标站点内容
             target_url = f"https://{target_domain}"
+            add_log(f"开始获取目标站点: {target_url}")
             
             try:
-                # 5. 获取目标站点内容
-                self.logger.info(f"开始获取目标站点: {target_url}")
                 response = requests.get(target_url, verify=False, timeout=30)
                 response.raise_for_status()
+                add_log(f"获取目标站点成功: {len(response.content)} 字节")
                 
-                # 6. 解析HTML
+                # 5. 解析HTML
                 soup = BeautifulSoup(response.content, 'html.parser')
                 
-                # 创建已下载URL集合，避免重复下载
-                downloaded_urls = set()
-                
-                # 获取所有可点击元素的链接
+                # 6. 处理所有可点击元素
                 clickable_elements = soup.find_all(['a', 'button', 'input[type="submit"]', 
                     'input[type="button"]', '[onclick]', '[href]', '[role="button"]'])
+                add_log(f"找到 {len(clickable_elements)} 个可点击元素")
                 
+                # 处理每个链接
                 for element in clickable_elements:
                     href = element.get('href')
-                    onclick = element.get('onclick')
+                    if not href:
+                        continue
                     
-                    if href:
-                        # 处理href链接
-                        if href.startswith('#'):
-                            continue  # 跳过页内锚点
-                        if href.startswith('javascript:'):
-                            continue  # 跳过JavaScript代码
-                            
-                        full_url = urljoin(target_url, href)
-                        if full_url.startswith(target_url) and full_url not in downloaded_urls:
-                            try:
-                                # 下载页面内容
-                                page_response = requests.get(full_url, verify=False, timeout=30)
-                                if page_response.ok:
-                                    # 解析相对路径
-                                    path = urlparse(full_url).path.lstrip('/')
-                                    if not path:
-                                        path = 'index.html'
-                                    elif not path.endswith(('.html', '.htm')):
-                                        path = f"{path}/index.html"
-                                        
-                                    # 保存页面
-                                    page_path = os.path.join(request.target_path, path)
-                                    os.makedirs(os.path.dirname(page_path), exist_ok=True)
-                                    
-                                    # 解析页面内容
-                                    page_soup = BeautifulSoup(page_response.content, 'html.parser')
-                                    
-                                    # 处理TDK
-                                    if request.tdk and request.tdk_rules:
-                                        self._update_tdk(page_soup, request.tdk_rules)
-                                    
-                                    # 保存页面
-                                    with open(page_path, 'w', encoding='utf-8') as f:
-                                        f.write(str(page_soup))
-                                    
-                                    downloaded_urls.add(full_url)
-                                    self.logger.debug(f"下载页面成功: {full_url}")
-                                    
-                                    # 递归处理页面中的资源
-                                    await self._process_page_resources(page_soup, target_url, request.target_path, downloaded_urls)
-                                    
-                            except Exception as e:
-                                self.logger.warning(f"下载页面失败 {full_url}: {str(e)}")
+                    if href.startswith(('#', 'javascript:', 'mailto:', 'tel:')):
+                        add_log(f"跳过特殊链接: {href}", 'info')
+                        continue
+                    
+                    full_url = urljoin(target_url, href)
+                    if full_url.startswith(target_url) and full_url not in downloaded_urls:
+                        try:
+                            add_log(f"处理链接: {full_url}")
+                            await self._process_link(full_url, request.target_path, downloaded_urls, add_log)
+                        except Exception as e:
+                            add_log(f"处理链接失败 {full_url}: {str(e)}", 'warning')
 
-                # 7. TDK替换
-                if request.tdk and request.tdk_rules:
-                    try:
-                        self._update_tdk(soup, request.tdk_rules)
-                    except Exception as e:
-                        self.logger.warning(f"TDK替换失败: {str(e)}")
+                # 7. 处理资源文件
+                resource_tags = soup.find_all(['link', 'script', 'img', 'video', 'audio', 'source'])
+                add_log(f"找到 {len(resource_tags)} 个资源文件")
                 
-                # 8. 保存HTML
-                try:
-                    index_path = os.path.join(request.target_path, 'index.html')
-                    with open(index_path, 'w', encoding='utf-8') as f:
-                        f.write(str(soup))
-                except Exception as e:
-                    self.logger.error(f"保存HTML失败: {str(e)}")
-                    return MirrorResponse(
-                        success=False,
-                        message=f"保存HTML失败: {str(e)}"
-                    )
-                
-                # 9. 下载资源文件
                 downloaded = 0
                 failed = 0
-                for tag in soup.find_all(['link', 'script', 'img']):
+                for tag in resource_tags:
                     src = tag.get('src') or tag.get('href')
                     if src:
                         try:
-                            if src.startswith('//'):
-                                src = f'https:{src}'
-                            elif src.startswith('/'):
-                                src = f'{target_url}{src}'
-                            elif not src.startswith(('http://', 'https://')):
-                                src = urljoin(target_url, src)
-                            
-                            res = requests.get(src, verify=False, timeout=10)
-                            if res.ok:
-                                local_path = os.path.join(request.target_path, urlparse(src).path.lstrip('/'))
-                                os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                                with open(local_path, 'wb') as f:
-                                    f.write(res.content)
+                            success = await self._download_resource(src, target_url, request.target_path, downloaded_urls)
+                            if success:
                                 downloaded += 1
-                                self.logger.debug(f"下载成功: {src}")
+                                add_log(f"下载资源成功: {src}")
                             else:
                                 failed += 1
-                                self.logger.warning(f"资源下载失败: {src}, 状态码: {res.status_code}")
+                                add_log(f"下载资源失败: {src}", 'warning')
                         except Exception as e:
                             failed += 1
-                            self.logger.warning(f"下载资源失败 {src}: {str(e)}")
-                
-                # 10. 生成站点地图
-                if request.sitemap:
-                    try:
-                        sitemap_path = os.path.join(request.target_path, 'sitemap.xml')
-                        self._generate_sitemap(target_url, sitemap_path)
-                    except Exception as e:
-                        self.logger.warning(f"生成站点地图失败: {str(e)}")
-                
-                # 在成功镜像后，保存配置信息
+                            add_log(f"下载资源出错: {src} - {str(e)}", 'warning')
+
+                # 8. 保存配置
                 mirror_config = {
                     'target_domain': target_domain,
                     'mirror_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     'files_count': downloaded,
                     'sitemap': request.sitemap,
-                    'tdk': request.tdk
+                    'tdk': request.tdk,
+                    'logs': mirror_log
                 }
-
+                
                 config_file = os.path.join(request.target_path, '.mirror-config.json')
                 with open(config_file, 'w') as f:
                     json.dump(mirror_config, f, indent=2)
                 
+                add_log(f"镜像完成: 成功 {downloaded} 个文件, 失败 {failed} 个文件")
+                
                 return MirrorResponse(
                     success=True,
-                    message=f"站点镜像成功, 下载成功: {downloaded} 个文件, 失败: {failed} 个文件",
+                    message=f"站点镜像成功: 下载成功 {downloaded} 个文件, 失败 {failed} 个文���",
                     data={
                         "target_path": request.target_path,
                         "files_count": downloaded,
                         "failed_count": failed
-                    }
+                    },
+                    logs=mirror_log
                 )
                 
-            except requests.RequestException as e:
-                self.logger.error(f"获取目标站点失败: {str(e)}")
+            except Exception as e:
+                add_log(f"镜像过程出错: {str(e)}", 'error')
                 return MirrorResponse(
                     success=False,
-                    message=f"获取目标站点失败: {str(e)}"
+                    message=f"镜像失败: {str(e)}",
+                    logs=mirror_log
                 )
                 
         except Exception as e:
-            self.logger.error(f"镜像站点失败: {str(e)}")
+            add_log(f"镜像站点失败: {str(e)}", 'error')
             return MirrorResponse(
                 success=False,
-                message=f"镜像站点失败: {str(e)}"
+                message=f"镜像站点失败: {str(e)}",
+                logs=mirror_log
             )
     
     def _generate_sitemap(self, base_url, output_file):    
@@ -996,7 +953,7 @@ app.listen(port, () => {{
                 raise ValueError(f"站点 {domain} 未配置镜像")
 
             try:
-                # 删除所有文件，但保留目录
+                # 删除所有文件，但保留目���
                 for item in os.listdir(site.root_path):
                     item_path = os.path.join(site.root_path, item)
                     if os.path.isfile(item_path):
@@ -1028,3 +985,103 @@ app.listen(port, () => {{
                 success=False,
                 message=f"删除镜像失败: {str(e)}"
             )
+
+    async def _process_link(self, url: str, target_path: str, downloaded_urls: set, add_log):
+        """处理单个链接"""
+        try:
+            # 获取页面内容
+            response = requests.get(url, verify=False, timeout=30)
+            if not response.ok:
+                add_log(f"获取页面失败: {url}, 状态码: {response.status_code}", 'warning')
+                return
+
+            # 解析页面内容
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # 解析相对路径
+            path = urlparse(url).path.lstrip('/')
+            if not path:
+                path = 'index.html'
+            elif not path.endswith(('.html', '.htm')):
+                path = f"{path}/index.html"
+            
+            # 创建目标目录
+            page_path = os.path.join(target_path, path)
+            os.makedirs(os.path.dirname(page_path), exist_ok=True)
+            
+            # 处理页面中的资源链接
+            for tag in soup.find_all(['img', 'script', 'link', 'video', 'audio', 'source']):
+                src = tag.get('src') or tag.get('href')
+                if not src:
+                    continue
+                    
+                # 处理相对路径
+                if src.startswith('//'):
+                    src = f'https:{src}'
+                elif src.startswith('/'):
+                    src = f"{url.split('//', 1)[0]}//{urlparse(url).netloc}{src}"
+                elif not src.startswith(('http://', 'https://')):
+                    src = urljoin(url, src)
+                
+                # 下载资源
+                if src not in downloaded_urls:
+                    try:
+                        res = requests.get(src, verify=False, timeout=10)
+                        if res.ok:
+                            # 构建本地路径
+                            local_path = os.path.join(target_path, urlparse(src).path.lstrip('/'))
+                            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                            
+                            # 保存文件
+                            with open(local_path, 'wb') as f:
+                                f.write(res.content)
+                                
+                            downloaded_urls.add(src)
+                            add_log(f"下载资源成功: {src}")
+                            
+                            # 更新标签的src属性为相对路径
+                            relative_path = os.path.relpath(local_path, os.path.dirname(page_path))
+                            if tag.get('src'):
+                                tag['src'] = relative_path
+                            if tag.get('href'):
+                                tag['href'] = relative_path
+                        else:
+                            add_log(f"下载资源失败: {src}, 状态码: {res.status_code}", 'warning')
+                    except Exception as e:
+                        add_log(f"下载资源失败: {src}, 错误: {str(e)}", 'warning')
+            
+            # 处理页面中的链接
+            for a_tag in soup.find_all('a'):
+                href = a_tag.get('href')
+                if not href:
+                    continue
+                    
+                # 跳过特殊链接
+                if href.startswith(('#', 'javascript:', 'mailto:', 'tel:')):
+                    continue
+                    
+                # 处理相对路径
+                if href.startswith('//'):
+                    href = f'https:{href}'
+                elif href.startswith('/'):
+                    href = f"{url.split('//', 1)[0]}//{urlparse(url).netloc}{href}"
+                elif not href.startswith(('http://', 'https://')):
+                    href = urljoin(url, href)
+                    
+                # 更新为相对路径
+                if href in downloaded_urls:
+                    relative_path = os.path.relpath(
+                        os.path.join(target_path, urlparse(href).path.lstrip('/')),
+                        os.path.dirname(page_path)
+                    )
+                    a_tag['href'] = relative_path
+            
+            # 保存处理后的页面
+            with open(page_path, 'w', encoding='utf-8') as f:
+                f.write(str(soup))
+                
+            downloaded_urls.add(url)
+            add_log(f"处理页面成功: {url}")
+            
+        except Exception as e:
+            add_log(f"处理链接失败: {url}, 错误: {str(e)}", 'error')
