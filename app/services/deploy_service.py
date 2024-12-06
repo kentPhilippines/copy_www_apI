@@ -674,7 +674,11 @@ app.listen(port, () => {{
             # 1. 检查源站点是否存在
             source_site = await self.get_site_info(request.domain)
             if not source_site:
-                raise ValueError(f"站点 {request.domain} 不存在")
+                self.logger.error(f"源站点不存在: {request.domain}")
+                return MirrorResponse(
+                    success=False,
+                    message=f"源站点不存在: {request.domain}"
+                )
             
             # 2. 处理目标域名 - 移除协议前缀
             target_domain = request.target_domain
@@ -682,13 +686,27 @@ app.listen(port, () => {{
                 target_domain = target_domain.split('://', 1)[1]
             
             # 3. 确保目标路径存在
-            os.makedirs(request.target_path, exist_ok=True)
+            try:
+                os.makedirs(request.target_path, exist_ok=True)
+            except PermissionError:
+                self.logger.error(f"无权限创建目录: {request.target_path}")
+                return MirrorResponse(
+                    success=False,
+                    message=f"无权限创建目录: {request.target_path}"
+                )
+            except Exception as e:
+                self.logger.error(f"创建目录失败: {request.target_path}, 错误: {str(e)}")
+                return MirrorResponse(
+                    success=False,
+                    message=f"创建目录失败: {str(e)}"
+                )
             
             # 4. 构建完整的目标URL
             target_url = f"https://{target_domain}"
             
             try:
                 # 5. 获取目标站点内容
+                self.logger.info(f"开始获取目标站点: {target_url}")
                 response = requests.get(target_url, verify=False, timeout=30)
                 response.raise_for_status()
                 
@@ -697,70 +715,82 @@ app.listen(port, () => {{
                 
                 # 7. TDK替换
                 if request.tdk and request.tdk_rules:
-                    if 'title' in request.tdk_rules:
-                        title_tag = soup.find('title')
-                        if title_tag:
-                            title_tag.string = request.tdk_rules['title']
-                    
-                    if 'keywords' in request.tdk_rules:
-                        keywords_tag = soup.find('meta', attrs={'name': 'keywords'})
-                        if keywords_tag:
-                            keywords_tag['content'] = request.tdk_rules['keywords']
-                    
-                    if 'description' in request.tdk_rules:
-                        desc_tag = soup.find('meta', attrs={'name': 'description'})
-                        if desc_tag:
-                            desc_tag['content'] = request.tdk_rules['description']
+                    try:
+                        self._update_tdk(soup, request.tdk_rules)
+                    except Exception as e:
+                        self.logger.warning(f"TDK替换失败: {str(e)}")
                 
                 # 8. 保存HTML
-                index_path = os.path.join(request.target_path, 'index.html')
-                with open(index_path, 'w', encoding='utf-8') as f:
-                    f.write(str(soup))
+                try:
+                    index_path = os.path.join(request.target_path, 'index.html')
+                    with open(index_path, 'w', encoding='utf-8') as f:
+                        f.write(str(soup))
+                except Exception as e:
+                    self.logger.error(f"保存HTML失败: {str(e)}")
+                    return MirrorResponse(
+                        success=False,
+                        message=f"保存HTML失败: {str(e)}"
+                    )
                 
                 # 9. 下载资源文件
+                downloaded = 0
+                failed = 0
                 for tag in soup.find_all(['link', 'script', 'img']):
                     src = tag.get('src') or tag.get('href')
                     if src:
-                        if src.startswith('//'):
-                            src = f'https:{src}'
-                        elif src.startswith('/'):
-                            src = f'{target_url}{src}'
-                        elif not src.startswith(('http://', 'https://')):
-                            src = urljoin(target_url, src)
-                        
                         try:
+                            if src.startswith('//'):
+                                src = f'https:{src}'
+                            elif src.startswith('/'):
+                                src = f'{target_url}{src}'
+                            elif not src.startswith(('http://', 'https://')):
+                                src = urljoin(target_url, src)
+                            
                             res = requests.get(src, verify=False, timeout=10)
                             if res.ok:
-                                # 构建本地保存路径
                                 local_path = os.path.join(request.target_path, urlparse(src).path.lstrip('/'))
                                 os.makedirs(os.path.dirname(local_path), exist_ok=True)
                                 with open(local_path, 'wb') as f:
                                     f.write(res.content)
+                                downloaded += 1
+                                self.logger.debug(f"下载成功: {src}")
+                            else:
+                                failed += 1
+                                self.logger.warning(f"资源下载失败: {src}, 状态码: {res.status_code}")
                         except Exception as e:
+                            failed += 1
                             self.logger.warning(f"下载资源失败 {src}: {str(e)}")
                 
                 # 10. 生成站点地图
                 if request.sitemap:
-                    sitemap_path = os.path.join(request.target_path, 'sitemap.xml')
-                    self._generate_sitemap(target_url, sitemap_path)
+                    try:
+                        sitemap_path = os.path.join(request.target_path, 'sitemap.xml')
+                        self._generate_sitemap(target_url, sitemap_path)
+                    except Exception as e:
+                        self.logger.warning(f"生成站点地图失败: {str(e)}")
                 
                 return MirrorResponse(
                     success=True,
-                    message="站点镜像成功",
+                    message=f"站点镜像成功, 下载成功: {downloaded} 个文件, 失败: {failed} 个文件",
                     data={
                         "target_path": request.target_path,
-                        "files_count": len(list(Path(request.target_path).rglob('*')))
+                        "files_count": downloaded,
+                        "failed_count": failed
                     }
                 )
                 
             except requests.RequestException as e:
-                raise ValueError(f"获取目标站点失败: {str(e)}")
+                self.logger.error(f"获取目标站点失败: {str(e)}")
+                return MirrorResponse(
+                    success=False,
+                    message=f"获取目标站点失败: {str(e)}"
+                )
                 
         except Exception as e:
             self.logger.error(f"镜像站点失败: {str(e)}")
             return MirrorResponse(
                 success=False,
-                message=str(e)
+                message=f"镜像站点失败: {str(e)}"
             )
     
     def _generate_sitemap(self, base_url, output_file):    
