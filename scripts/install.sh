@@ -6,6 +6,11 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+# 项目配置
+REPO_URL="https://github.com/kentPhilippines/copy_www_apI.git"
+INSTALL_DIR="/opt/nginx-deploy"
+BRANCH="main"  # 默认分支
+
 info() {
     echo -e "${GREEN}[INFO] $1${NC}"
 }
@@ -23,6 +28,51 @@ if [ "$EUID" -ne 0 ]; then
     error "请使用root权限运行此脚本"
     exit 1
 fi
+
+# 检查并安装git
+check_git() {
+    info "检查Git环境..."
+    if ! command -v git &> /dev/null; then
+        info "Git未安装,开始安装..."
+        if [ -f /etc/redhat-release ]; then
+            yum install -y git
+        elif [ -f /etc/debian_version ]; then
+            apt-get update
+            apt-get install -y git
+        else
+            error "不支持的操作系统,请手动安装Git"
+            exit 1
+        fi
+    fi
+    
+    # 验证git安装
+    if ! command -v git &> /dev/null; then
+        error "Git安装失败"
+        exit 1
+    fi
+    
+# 克隆代码
+clone_repo() {
+    info "克隆项目代码..."
+    
+    # 如果目录已存在,先备份
+    if [ -d "$INSTALL_DIR" ]; then
+        backup_dir="${INSTALL_DIR}_backup_$(date +%Y%m%d_%H%M%S)"
+        mv "$INSTALL_DIR" "$backup_dir"
+        info "已备份原目录到: $backup_dir"
+    fi
+    
+    # 克隆代码
+    git clone "$REPO_URL" "$INSTALL_DIR"
+    
+    if [ $? -ne 0 ]; then
+        error "代码克隆失败"
+        exit 1
+    fi
+    
+    # 切换到项目目录
+    cd "$INSTALL_DIR"
+}
 
 # 安装系统依赖
 install_system_deps() {
@@ -132,9 +182,9 @@ After=network.target
 
 [Service]
 User=root
-WorkingDirectory=/opt/nginx-deploy
-Environment=PYTHONPATH=/opt/nginx-deploy
-ExecStart=/opt/nginx-deploy/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000
+WorkingDirectory=$INSTALL_DIR
+Environment=PYTHONPATH=$INSTALL_DIR
+ExecStart=$INSTALL_DIR/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=10
 
@@ -145,8 +195,9 @@ EOF
     # 重载systemd
     systemctl daemon-reload
     
-    # 启用服务
+    # 启用并启动服务
     systemctl enable nginx-deploy
+    systemctl start nginx-deploy
 }
 
 # 验证安装
@@ -161,14 +212,19 @@ verify_installation() {
     
     # 检查服务状态
     systemctl status nginx || warn "Nginx 服务检查失败"
+    systemctl status nginx-deploy || warn "API 服务检查失败"
     
-    # 检查虚拟环境
-    source venv/bin/activate && python -c "import fastapi" || warn "FastAPI 检查失败"
+    # 检查API是否响应
+    sleep 5
+    curl -s http://localhost:8000/ > /dev/null || warn "API 服务未响应"
 }
 
 # 主安装流程
 main() {
     info "开始安装 Nginx Deploy API..."
+    
+    # 克隆代码
+    clone_repo
     
     # 安装系统依赖
     install_system_deps
@@ -204,6 +260,7 @@ if [ $? -eq 0 ]; then
     echo "systemctl restart nginx-deploy  # 重启服务"
     echo "systemctl status nginx-deploy   # 查看状态"
     info "==================================="
+    info "API文档地址: http://your-server:8000/docs"
 else
     error "安装过程中出现错误，请检查日志"
     exit 1
