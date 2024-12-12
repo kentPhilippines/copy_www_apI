@@ -1,5 +1,8 @@
 # Nginx 站点部署管理系统
-curl -o install.sh https://raw.githubusercontent.com/kentPhilippines/copy_www_apI/main/scripts/install.sh && chmod +x install.sh && sudo ./install.sh
+部署脚本
+```bash  
+curl -fsSL https://raw.githubusercontent.com/kentPhilippines/copy_www_apI/main/scripts/install.sh | sudo bash
+```
 基于 FastAPI 的 Nginx 站点自动化部署和管理系统，支持多站点管理、SSL 证书自动化和站点监控。
 
 ## 主要功能
