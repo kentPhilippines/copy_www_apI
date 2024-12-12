@@ -51,6 +51,9 @@ check_git() {
         exit 1
     fi
     
+    info "Git环境检查完成"
+}
+
 # 克隆代码
 clone_repo() {
     info "克隆项目代码..."
