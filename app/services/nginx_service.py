@@ -68,7 +68,7 @@ class NginxService:
         """生成站点配置"""
         config = ""
         
-        # HTTP配置(用于SSL验证或重定向)
+        # HTTP配置(用于SSL验证���重定向)
         http_config = """
 server {
     listen 80;
@@ -81,13 +81,13 @@ server {
         allow all;
     }
     
-    # 如果启用了SSL，其他请求重定向到HTTPS
+    # 如果启用了SSL，重定向到HTTPS
     %s
 }
 """ % (
             site.domain,
             site.root_path,
-            "return 301 https://$server_name$request_uri;" if site.ssl_enabled else ""
+            "return 301 https://$server_name$request_uri;" if site.ssl_enabled else f"return 301 http://$server_name:{site.proxy_port}$request_uri;"
         )
         
         config += http_config
