@@ -29,34 +29,25 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# 检查并安装git
-check_git() {
-    info "检查Git环境..."
-    if ! command -v git &> /dev/null; then
-        info "Git未安装,开始安装..."
-        if [ -f /etc/redhat-release ]; then
-            yum install -y git
-        elif [ -f /etc/debian_version ]; then
-            apt-get update
-            apt-get install -y git
-        else
-            error "不支持的操作系统,请手动安装Git"
-            exit 1
-        fi
-    fi
-    
-    # 验证git安装
-    if ! command -v git &> /dev/null; then
-        error "Git安装失败"
+# 安装基础依赖
+install_base_deps() {
+    info "安装基础依赖..."
+    if [ -f /etc/redhat-release ]; then
+        # CentOS/RHEL系统
+        yum install -y git curl wget
+    elif [ -f /etc/debian_version ]; then
+        # Debian/Ubuntu系统
+        apt-get update
+        apt-get install -y git curl wget
+    else
+        error "不支持的操作系统"
         exit 1
     fi
-    
-    info "Git环境检查完成"
 }
 
-# 克隆代码
-clone_repo() {
-    info "克隆项目代码..."
+# 获取代码
+get_code() {
+    info "获取项目代码..."
     
     # 如果目录已存在,先备份
     if [ -d "$INSTALL_DIR" ]; then
@@ -65,15 +56,34 @@ clone_repo() {
         info "已备份原目录到: $backup_dir"
     fi
     
-    # 克隆代码
-    git clone "$REPO_URL" "$INSTALL_DIR"
-    
-    if [ $? -ne 0 ]; then
-        error "代码克隆失败"
-        exit 1
+    # 先尝试git克隆
+    if command -v git &> /dev/null; then
+        info "使用Git克隆代码..."
+        git clone -b "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
+        if [ $? -eq 0 ]; then
+            cd "$INSTALL_DIR"
+            return 0
+        fi
+        warn "Git克隆失败,尝试使用下载压缩包方式..."
     fi
     
-    # 切换到项目目录
+    # Git克隆失败或不存在时,使用wget下载压缩包
+    info "下载项目压缩包..."
+    TEMP_ZIP="/tmp/nginx-deploy.zip"
+    DOWNLOAD_URL="https://github.com/kentPhilippines/copy_www_apI/archive/refs/heads/main.zip"
+    
+    wget -O "$TEMP_ZIP" "$DOWNLOAD_URL" || {
+        error "代码下载失败"
+        exit 1
+    }
+    
+    # 解压代码
+    mkdir -p "$INSTALL_DIR"
+    unzip -q "$TEMP_ZIP" -d "/tmp/"
+    mv /tmp/copy_www_apI-main/* "$INSTALL_DIR/"
+    rm -f "$TEMP_ZIP"
+    rm -rf /tmp/copy_www_apI-main
+    
     cd "$INSTALL_DIR"
 }
 
@@ -95,9 +105,7 @@ install_system_deps() {
             python3-pip \
             python3-devel \
             gcc \
-            curl \
-            wget \
-            git \
+            unzip \
             openssl \
             openssl-devel
 
@@ -121,9 +129,7 @@ install_system_deps() {
             python3-pip \
             python3-venv \
             build-essential \
-            curl \
-            wget \
-            git \
+            unzip \
             openssl \
             libssl-dev
 
@@ -226,8 +232,11 @@ verify_installation() {
 main() {
     info "开始安装 Nginx Deploy API..."
     
-    # 克隆代码
-    clone_repo
+    # 安装基础依赖
+    install_base_deps
+    
+    # 获取代码
+    get_code
     
     # 安装系统依赖
     install_system_deps
