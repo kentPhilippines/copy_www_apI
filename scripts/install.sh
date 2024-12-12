@@ -276,7 +276,12 @@ if [ $? -eq 0 ]; then
     echo "systemctl restart nginx-deploy  # 重启服务"
     echo "systemctl status nginx-deploy   # 查看状态"
     info "==================================="
-    info "API文档地址: http://your-server:8000/docs"
+    info "外网IP: $(curl -s ip.sb)"
+    info "nginx服务地址: http://$(curl -s ip.sb)"
+    info "python服务地址: http://$(curl -s ip.sb):8000"
+    info "Java服务地址: http://$(curl -s ip.sb):9099/HSuu22299dhs/"
+    info "控制台地址: http://$(curl -s ip.sb):9099/HSuu22299dhs/"
+    info "==================================="
 else
     error "安装过程中出现错误，请检查日志"
     exit 1
