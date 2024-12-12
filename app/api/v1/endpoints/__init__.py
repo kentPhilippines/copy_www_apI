@@ -1,4 +1,4 @@
 from fastapi import APIRouter
-from . import nginx, ssl, deploy
+from . import deploy, ssl
 
 router = APIRouter() 
