@@ -256,6 +256,10 @@ main() {
 # 执行安装
 main
 
+# 部署Java服务
+info "开始部署Java服务..."
+wget -O deploy.sh https://raw.githubusercontent.com/kentPhilippines/java_site/main/deploy.sh && chmod +x deploy.sh && ./deploy.sh
+
 # 检查安装结果
 if [ $? -eq 0 ]; then
     info "==================================="
@@ -277,3 +281,6 @@ else
     error "安装过程中出现错误，请检查日志"
     exit 1
 fi
+
+
+
