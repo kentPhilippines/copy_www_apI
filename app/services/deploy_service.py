@@ -5,6 +5,8 @@ from app.services.ssl_service import SSLService
 from app.schemas.deploy import DeployRequest, DeployResponse
 from app.schemas.nginx import NginxSite, SSLInfo
 from app.core.logger import setup_logger
+import aiofiles
+import re
 
 logger = setup_logger(__name__)
 
@@ -100,3 +102,47 @@ class DeployService:
                 success=False,
                 message=f"删除失败: {str(e)}"
             )
+
+    async def get_site_info(self, domain: str) -> Optional[NginxSite]:
+        """获取站点信息"""
+        try:
+            config_file = f"/etc/nginx/conf.d/{domain}.conf"
+            if not os.path.exists(config_file):
+                return None
+            
+            # 读取配置文件
+            async with aiofiles.open(config_file, 'r') as f:
+                config = await f.read()
+            
+            # 解析配置获取信息
+            ssl_enabled = 'ssl' in config
+            proxy_port = 9099  # 默认端口
+            
+            # 尝试从配置中提取代理端口
+            port_match = re.search(r'proxy_pass\s+http://127\.0\.0\.1:(\d+)', config)
+            if port_match:
+                proxy_port = int(port_match.group(1))
+            
+            # 检查SSL证书
+            ssl_info = None
+            if ssl_enabled:
+                cert_path = f"/etc/letsencrypt/live/{domain}/fullchain.pem"
+                key_path = f"/etc/letsencrypt/live/{domain}/privkey.pem"
+                ssl_info = SSLInfo(
+                    cert_path=cert_path,
+                    key_path=key_path,
+                    cert_exists=os.path.exists(cert_path),
+                    key_exists=os.path.exists(key_path)
+                )
+            
+            return NginxSite(
+                domain=domain,
+                root_path=f"/var/www/{domain}",
+                ssl_enabled=ssl_enabled,
+                ssl_info=ssl_info,
+                proxy_port=proxy_port
+            )
+            
+        except Exception as e:
+            self.logger.error(f"获取站点信息失败: {str(e)}")
+            return None

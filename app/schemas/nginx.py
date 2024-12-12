@@ -9,12 +9,14 @@ class SSLInfo(BaseModel):
     key_exists: bool = False
 
 class NginxSite(BaseModel):
-    """Nginx站点配置模型"""
+    """Nginx站点配置"""
     domain: str
     root_path: str
     ssl_enabled: bool = False
     ssl_info: Optional[SSLInfo] = None
-    proxy_port: int = 9099  # 反向代理端口
+    proxy_ip: str = "127.0.0.1"
+    proxy_port: int = 9099
+    proxy_host: Optional[str] = None
     custom_config: Optional[str] = None
 
 class NginxResponse(BaseModel):

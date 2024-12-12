@@ -68,7 +68,7 @@ class NginxService:
         """生成站点配置"""
         config = ""
         
-        # HTTP配置(用于SSL验证���重定向)
+        # HTTP配置(用于SSL验证重定向)
         http_config = """
 server {
     listen 80;
@@ -114,8 +114,8 @@ server {
 
     # 反向代理配置
     location / {
-        proxy_pass http://127.0.0.1:%d;
-        proxy_set_header Host $host;
+        proxy_pass http://%s:%d;
+        proxy_set_header Host %s;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -138,7 +138,9 @@ server {
                 site.domain,
                 site.ssl_info.cert_path,
                 site.ssl_info.key_path,
+                site.proxy_ip,
                 site.proxy_port,
+                site.proxy_host or "$host",
                 site.custom_config if site.custom_config else ''
             )
             config += https_config
